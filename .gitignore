@@ -1,0 +1,21 @@
+# Never commit VM bundles, Apple firmware or anything copied out of a guest.
+vms/
+dsc/
+guestbin/
+inputs/
+recon/
+runs*/
+*.img
+*.ipsw
+*.im4p
+*.img4
+nvram.bin
+SEPStorage
+AVPBooter*.bin
+AVPSEPBooter*.bin
+ecid
+serial
+udid-prediction.txt
+# Profiling output
+perf.data*
+*.perf

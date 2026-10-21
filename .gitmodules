@@ -1,0 +1,15 @@
+# The three forks, pinned by this repository's gitlinks. Clone with
+# `git submodule update --init` (not --recursive): reims-vgpu's own vendor/qemu
+# submodule is not used, QEMU comes from ./qemu.
+[submodule "qemu"]
+	path = qemu
+	url = https://github.com/YahiaAngelo/qemu-vphone.git
+	branch = vphone
+[submodule "reims-vgpu"]
+	path = reims-vgpu
+	url = https://github.com/YahiaAngelo/reims-vgpu.git
+	branch = vphone
+[submodule "metal2vulkan"]
+	path = metal2vulkan
+	url = https://github.com/YahiaAngelo/metal2vulkan.git
+	branch = vphone

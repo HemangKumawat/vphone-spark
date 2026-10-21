@@ -1,0 +1,81 @@
+# Tools
+
+Scripts in `tools/`. Most of them change to the repository root first, so you can run them from
+anywhere. They need Python 3 (some need `python3-pillow`), `socat` and, for profiling, `perf`.
+
+Common arguments:
+
+- **`SOCK`**: a QMP Unix socket. Start the VM with `-qmp unix:$PWD/runs/qmp.sock,server,nowait`
+  (`tools/boot-test.sh` does this for you, at `runs/RUN/qmp.sock`). QMP serves one client at a time.
+- **`CID`**: the VM's vsock CID (`run-vphone.sh`'s `CID`, default 3). vphoned listens on port 1339.
+- **`RUN`**: a run name. Output goes to `runs/RUN/` (`serial.log`, `stderr.log`, `qemu.log`,
+  `qmp.sock`).
+- **Coordinates** are guest pixels on the 1290x2796 grid, whatever `GFX_RES` is. QMP's absolute
+  pointer is scaled to the display.
+
+## Running VMs for tests
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `boot-test.sh` | `VMDIR=vms/test tools/boot-test.sh RUN CID [qemu args]` | Boots `VMDIR/vm` with the GPU and a window (`WINDOW=0` for headless) and a QMP socket in `runs/RUN/`. Waits for vphoned, then retries `screen.unlock` until the guest unlocks. Prints `vphoned up t=...` and `unlocked t=...`, or `fatal`. First stops any VM a previous `boot-test.sh` started, and refuses to boot a `Disk.img` that another QEMU holds. Environment (`SMP`, `QEMU`, `VPHONE_*`, ...) passes through. Use a copy of your VM. |
+| `stuck.sh` | `tools/stuck.sh VM_DIR SECONDS [qemu args]` | Boots with a gdb stub, waits, then prints every CPU's pc/sp/lr/cpsr, CPU 0's ELR/ESR/FAR and TTBRs, and the code around them. For boots that hang. |
+| `firstfault.py` | `tools/firstfault.py VM_DIR [--after TEXT] [--n N] [--secs S] [--ctx L]` | Boots with `-d int,unimp` streamed through a FIFO and prints the exception log around the first N aborts or undefined instructions after a trigger line (default `Guarded Execution Enter`). Avoids multi-GB logs. |
+
+## vphoned (guest daemon over vsock)
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `vphoned.sh` | `tools/vphoned.sh [-c CID] METHOD PATH [JSON]` | One HTTP request to vphoned, e.g. `GET /v1/health`, or `POST /v1/rpc '{"method":"screen.unlock","params":{},"id":1}'`. Uses AF_VSOCK with a 4 MiB socket buffer, or the `uds` socket when `$VSOCK_DIR/$CID.sock` exists. Keeps its write side open, as vphoned requires. `VPHONED_TIMEOUT` (default 300 s). |
+| `vphoned-update.sh` | `tools/vphoned-update.sh [-c CID] BINARY` | Replaces the guest's vphoned through its self-update: uploads to `/var/root/Library/Caches/vphoned.next`, then `agent.apply_update` with the SHA-256. The binary must be signed the way vphone-cli's `StageBundle.sh` signs it. Changes the VM's disk. |
+| `guest-get.py` | `tools/guest-get.py CID GUEST_PATH LOCAL_PATH` | Downloads a file with `GET /v1/files/content`, streaming. On vhost-vsock this stops after 64 KiB; it works on a `VSOCK=uds` VM. |
+| `guest-read.py` | `tools/guest-read.py CID GUEST_PATH LOCAL_PATH [SIZE]` | Downloads a file with the `files.read` RPC (base64 in JSON). Works on vhost-vsock. Default limit 512 MiB. |
+
+## Input and screen (QMP)
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `qmp.py` | `tools/qmp.py SOCK shot OUT.png` · `tap X Y` · `swipe X0 Y0 X1 Y1 [MS [STEPS]]` · `home` · `key QCODE...` | Screenshot, tap, swipe (default 300 ms, 20 steps), Home (a middle click, which the touchscreen turns into Cmd+H) and key presses. |
+| `screen-changed.py` | `tools/screen-changed.py SOCK save PATH` · `tools/screen-changed.py SOCK BEFORE.ppm` | Saves a PPM screendump, or exits 0 if the screen now differs clearly from `BEFORE`, else 1. Needs Pillow. |
+| `display-scale.py` | `tools/display-scale.py NVRAM [SCALE]` | Shows or sets iOS's screen scale by patching LLB in `nvram.bin` (`0` restores). Use it with a matching `gfx-res`. See [SETUP.md §8](SETUP.md#8-display-scale). Run it on a stopped VM, and keep a backup. |
+
+## Latency and frame-rate benchmarks
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `tap-latency.py` | `tools/tap-latency.py SOCK NAME X Y [NAME X Y ...]` | From the home screen, taps each icon and reports the seconds to the first screen change and to a settled screen, then goes Home. QMP only (no vphoned). Example apps on the default home screen: `Calendar 497 1015 Settings 1089 1953 Maps 200 1953 Photos 794 1015`. |
+| `switch-latency.sh` | `tools/switch-latency.sh RUN CID BUNDLE_ID [URL]` | Asks vphoned to `apps.launch` a bundle and reports the time to the first screen change and when vphoned answered. Pass a URL (e.g. `calshow://`) to skip vphoned's slow running-apps listing. Screenshots go to `runs/RUN/sw-BUNDLE/`. |
+| `scroll-bench.sh` | `tools/scroll-bench.sh RUN CID [boot-test args]` | Boots with `REIMS_VGPU_STATS=1`, waits, then runs `scroll-measure.sh`. |
+| `scroll-measure.sh` | `tools/scroll-measure.sh RUN CID` | On a running VM (booted with `REIMS_VGPU_STATS=1` and `-name vphone,debug-threads=on`): opens Settings, warms it, scrolls for about 15 s, and prints frames/s per second, the average, the worst gap and the vCPU load. |
+| `swipe-film.py` | `tools/swipe-film.py SOCK OUTDIR X0 Y0 X1 Y1 [SECONDS]` | Swipes and takes a PPM screendump every ~35-50 ms. Saves downscaled PNG frames and prints how much each differs from the previous and the last. Pair it with `VPHONE_TOUCH_TRACE=1`. |
+| `perf-apps.sh` | `tools/perf-apps.sh RUN CID [boot-test args]` | Boots, records `perf` on QEMU for 40 s while opening four apps (Home after each), shuts down, and prints the DSO and symbol breakdown of vCPU threads. Output in `$PERF_OUT` (default `$TMPDIR/perf-apps`). |
+
+## Profiling helpers
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `thread-cpu.py` | `tools/thread-cpu.py PID SECONDS [INTERVAL]` | Per-thread CPU (% of a core) every interval: total, each vCPU (`CPU n/TCG`), the busiest other threads. Needs `-name ...,debug-threads=on` for named vCPU threads. |
+| `cpu-sample.py` | `tools/cpu-sample.py SOCK SECONDS [INTERVAL]` | Samples each AP vCPU's PC and exception level over QMP (`info registers -a`). Prints `I` (idle), `K<pc>` (kernel) or `U<pc>` (user) per CPU. Set `IDLE_PC` to this boot's idle-loop PC (the default is from one test boot; the kernel slides every boot). Biased: TCG updates the PC only at helper calls. |
+| `dsc-symbolize.py` | `tools/dsc-symbolize.py SAMPLES CACHE_BASE [TOP]` | Attributes user-mode PCs (the `U<pc>` tokens of `cpu-sample.py`'s format) to shared-cache images and functions, using the guest's dyld shared cache copied to `dsc/`. `CACHE_BASE` is the cache's load address in this boot (`sharedCache.base` of a crash report). |
+| `pin-threads.sh` | `tools/pin-threads.sh PID [show]` | Pins a running QEMU's threads: each vCPU thread (`CPU n/TCG`) alone on its own physical P-core, the GPU threads (`reims-vgpu.*`, `metal2vulkan*`) and QEMU's main thread on those cores' hyper-thread siblings, everything else on the E-cores. `show` prints the placement without applying it. The defaults are for an i7-14700K; override them with `VCPU_CORES` (space-separated, default `0 2 4 6 8 10 12 14`), `GPU_CPUS` (default `1,3,5,7,9,11,13,15`) and `OTHER_CPUS` (default `16-27`). Needs `-name ...,debug-threads=on`. Measured no difference on the Settings scroll; provided for experiments. |
+| `jit-stats.py` | `tools/jit-stats.py SOCK SECONDS` | QEMU's JIT counters (`info jit`: code size, TBs, flushes, invalidations, partial TLB flushes) and their rates over an interval. |
+| `perf-tlb-share.sh` | `tools/perf-tlb-share.sh PERF.DATA [TOP]` | Share of samples in softmmu TLB fill/page walk, TLB flush and memory slow-path symbols, plus the top symbols. Sums both PMUs of a hybrid CPU. |
+| `validate-run.sh` | `tools/validate-run.sh RUN CID BUNDLE_ID` | Boots under the Khronos Vulkan validation layer (errors only, to `runs/RUN/validation.log`, with backtraces through `M2V_VALIDATION_BACKTRACE`), launches an app, and reports validation errors and NVIDIA Xid faults (`journalctl -k`). |
+
+## vsock diagnostics
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `vsock-rings.py` | `tools/vsock-rings.py SOCK` | The vhost-vsock device's virtqueue layout (QEMU's view) and each ring's avail/used index from guest memory. Diagnoses a vsock that times out on every port (overlapping rings). |
+| `vsock-boot-check.sh` | `tools/vsock-boot-check.sh N CID0` | N headless boots (`VMDIR` as for `boot-test.sh`). For each, whether vphoned answers, plus the ring layout. Uses CIDs `CID0`, `CID0+1`, ... |
+
+## Firmware and recovery-mode USB (research)
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `im4p_payload.py` | `tools/im4p_payload.py IN.im4p OUT.bin` | Extracts an IM4P payload and LZFSE-decompresses it (needs `liblzfse`). For looking at firmware you extracted yourself. |
+| `vusb-host.py` | `tools/vusb-host.py SOCK STEP...` | Talks to QEMU's `vresearch-vusb` device (the guest's USB device side in recovery/DFU mode) over its chardev, as the USB host would. Steps: `reset`, `setup:<8 hex bytes>`, `xfer:<ep>[:hex]`, `abort:<ep>`, `wait:<s>`. Experimental. |
+| `vusb-usbip.py` | `tools/vusb-usbip.py SOCK` | Exports that device as a USB/IP server on 127.0.0.1:3240 (`usbip list -r 127.0.0.1`). Discovery was verified; attaching and restoring were not. Experimental. |
+
+Recovery mode: boot a scratch copy of the VM whose `Disk.img` is blank (`truncate -s 1G Disk.img`) with
+`CID=0 ./run-vphone.sh DIR -chardev socket,id=vusb,path=$PWD/vusb.sock,server=on,wait=off -global vresearch-vusb.chardev=vusb`.
+LLB then enters recovery mode and presents the USB device.

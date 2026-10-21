@@ -1,0 +1,19 @@
+--- a/VPhoneExecutable/VPhoneCommand/VPhoneCommand/Firmware/VPhoneCustomFirmwareInstaller.swift
++++ b/VPhoneExecutable/VPhoneCommand/VPhoneCommand/Firmware/VPhoneCustomFirmwareInstaller.swift
+@@ -932,9 +932,14 @@
+         var seen = Set<dev_t>()
+         for path in paths {
+             var metadata = stat()
+             guard stat(path, &metadata) == 0, seen.insert(metadata.st_dev).inserted else { continue }
+-            let capacity =
+-                try URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+-                    .volumeAvailableCapacityForImportantUsage ?? 0
++            let values = try URL(fileURLWithPath: path).resourceValues(
++                forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey])
++            // Disk-image and external volumes report 0 for important usage
++            // while having space; fall back to the plain available capacity.
++            let important = values.volumeAvailableCapacityForImportantUsage ?? 0
++            let capacity = important > 0 ? important : Int64(values.volumeAvailableCapacity ?? 0)
+             guard capacity > 50 * 1024 * 1024 * 1024 else {
+                 throw ValidationError("Less than 50 GiB of disk space is available on the volume holding \(path). Free up space, then install CFW again.")
+             }

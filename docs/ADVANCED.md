@@ -158,7 +158,13 @@ python3 tools/display-scale.py vms/myphone/nvram.bin 0      # undo (back to 3x)
 
 Measured on Settings scrolling with a quiet guest: 3x 36.6 frames/s average with about 50-60% vCPU load,
 2x 37.9 frames/s with about 40%. The frame rate barely moved, but the CPU and GPU load dropped. The main
-test VM now runs at 1x. Known issue: at 1x the boot shows a black screen instead of the Apple logo.
+test VM now runs at 1x.
+
+**The boot logo at 1x.** iOS draws the boot Apple logo from `ProgressUI.framework`'s
+`apple-logo*@2x/@3x~iphone.png`, which have no 1x versions, so at 1x the screen stays black until the
+lock screen. `tools/guest-1x-logo.py CID` writes 1x versions, halved from the guest's own @2x
+images (nothing is copied in from outside). Its system volume is read-only, so the tool first runs
+`/sbin/mount -u -w /` through a one-shot launchd job; the volume is read-only again after the next boot.
 
 **At 1x, keep the width a multiple of 32** (rows a multiple of 128 bytes). NVIDIA's linear images
 need 128-byte rows. At 430 pixels wide (1720-byte rows), iOS's full-screen surfaces were shadow-copied

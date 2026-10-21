@@ -164,7 +164,13 @@ These made the biggest difference on the test PC:
    echo 448x932 > vms/myphone/gfx-res
    ```
 
-   `python3 tools/display-scale.py vms/myphone/nvram.bin 0` and deleting `gfx-res` undo it.
+   Then, with the VM running, restore the boot Apple logo, which iOS has no 1x image for:
+
+   ```sh
+   python3 tools/guest-1x-logo.py 3
+   ```
+
+   `python3 tools/display-scale.py vms/myphone/nvram.bin 0` and deleting `gfx-res` undo the scale.
 3. **Turn off background services** the VM doesn't need for app testing (iCloud, Siri, analytics...).
    vphone-cli's default `vm create` already turns off about 140 of them. More are listed in
    [ADVANCED.md](ADVANCED.md#background-services).

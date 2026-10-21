@@ -46,6 +46,7 @@ Common arguments:
 | `qmp.py` | `tools/qmp.py SOCK shot OUT.png` · `tap X Y` · `swipe X0 Y0 X1 Y1 [MS [STEPS]]` · `home` · `key QCODE...` | Screenshot, tap, swipe (default 300 ms, 20 steps), Home (a middle click, which the touchscreen turns into Cmd+H) and key presses. |
 | `screen-changed.py` | `tools/screen-changed.py SOCK save PATH` · `tools/screen-changed.py SOCK BEFORE.ppm` | Saves a PPM screendump, or exits 0 if the screen now differs clearly from `BEFORE`, else 1. Needs Pillow. |
 | `display-scale.py` | `tools/display-scale.py NVRAM [SCALE]` | Shows or sets iOS's screen scale by patching LLB in `nvram.bin` (`0` restores). Use it with a matching `gfx-res`. See [ADVANCED.md](ADVANCED.md#display-scale). Run it on a stopped VM, and keep a backup. |
+| `guest-1x-logo.py` | `tools/guest-1x-logo.py CID` | At 1x, gives the guest 1x copies of its boot Apple logo (halved from its own @2x images in ProgressUI.framework), which iOS otherwise lacks, leaving the boot screen black. Remounts `/` writable through a one-shot launchd job first. Takes effect from the next boot. |
 
 ## Latency and frame-rate benchmarks
 

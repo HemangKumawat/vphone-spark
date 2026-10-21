@@ -58,7 +58,6 @@ created with vphone-cli 2.9.4.
 - Creating and restoring the VM needs an **Apple Silicon Mac** with vphone-cli. Restore on Linux is not
   supported; the recovery-mode USB transport (`tools/vusb-*.py`) is an experiment.
 - Only the NVIDIA host GPU has been tested. reims-vgpu documents what AMD GPUs need (`/dev/udmabuf`).
-- With 1x display scale, boot shows a black screen instead of the Apple logo (not investigated).
 - vphoned's `GET /v1/files/content` stops after 64 KiB on the default vhost-vsock datapath; use
   `tools/guest-read.py`, or the `virtio-vsock-uds-pci` device (QEMU branch `vsock-uds`, not merged).
 - reims-vgpu runs in **census mode** by default: a Metal feature it cannot model costs an inexact frame

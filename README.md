@@ -2,6 +2,14 @@
 
 Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **Linux x86_64 host**.
 
+<p align="center">
+  <img src="docs/screenshots/lock-screen.png" width="200" alt="Lock screen">
+  <img src="docs/screenshots/home-screen.png" width="200" alt="Home screen with widgets">
+  <img src="docs/screenshots/maps.png" width="200" alt="Maps">
+  <img src="docs/screenshots/calendar.png" width="200" alt="Calendar">
+</p>
+<p align="center"><i>iOS 26.6.2 running on a Linux PC (Fedora, NVIDIA GPU) in vphone-linux.</i></p>
+
 vphone-cli runs iOS on an Apple Silicon Mac with Apple's Virtualization.framework, on the
 `vresearch101` virtual platform that Apple's Private Cloud Compute (PCC) research VMs use. vphone-linux
 boots the **same VM bundle** on Linux, with no Mac and no Apple code at run time:
@@ -22,7 +30,7 @@ Development updates: [@YahiaDev on X](https://x.com/YahiaDev).
 
 ## Status
 
-Tested on a single host: Fedora 44, Intel i7-14700K, 62 GB RAM, NVIDIA RTX 4080 SUPER (driver
+So far tested on one PC: Fedora 44, Intel i7-14700K, 62 GB RAM, NVIDIA RTX 4080 SUPER (driver
 615.71.09). The guest is iOS 26.6.2 (iPhone17,3 restore image, cloudOS 26.4 firmware pairing),
 created with vphone-cli 2.9.4.
 
@@ -61,40 +69,32 @@ created with vphone-cli 2.9.4.
 
 ## Quick start
 
-Full steps are in [docs/SETUP.md](docs/SETUP.md).
+You need:
+
+- **An Apple Silicon Mac, once**, to create the VM with vphone-cli. After that the Mac is not needed.
+- **A Linux x86_64 PC** with a Vulkan GPU (NVIDIA tested), 16 GB RAM or more, and about 60 GB free disk.
 
 ```sh
-git clone https://github.com/YahiaAngelo/vphone-linux.git
-cd vphone-linux
-git submodule update --init                                   # not --recursive
-git -C qemu submodule update --init util/mlib
+# On the Mac: create the VM (vphone-cli's guide has the details)
+vphone-cli vm create myphone --iphone-source iPhone17,3_Restore.ipsw --cloudos-source cloudOS.ipsw
 
-make -C reims-vgpu                                            # -> reims-vgpu/target/dist-vulkan
-mkdir -p qemu/build && cd qemu/build
-PKG_CONFIG_PATH=$PWD/../../reims-vgpu/target/dist-vulkan/lib/pkgconfig \
-  ../configure --target-list=aarch64-softmmu --enable-pvg --enable-lzfse --enable-slirp \
-  --enable-libssh --enable-zstd --enable-nettle --enable-gnutls --enable-gtk --enable-sdl \
-  --disable-werror --disable-qom-cast-debug
-cd ../.. && ninja -C qemu/build qemu-system-aarch64
-
-# On NVIDIA, lock the GPU clocks after every host reboot (docs/SETUP.md section 10)
-sudo nvidia-smi --lock-gpu-clocks=2000,3105 && sudo nvidia-smi --lock-memory-clocks=10000,11501
-
-# A VM bundle created with vphone-cli on a Mac, copied to vms/myphone (see docs/SETUP.md)
+# On Linux: build, copy the VM from the Mac, start it
+git clone https://github.com/YahiaAngelo/vphone-linux.git && cd vphone-linux
+tools/check-host.sh
+./build.sh
+tools/import-vm.sh me@my-mac.local:.vphone/machines/myphone myphone
 GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
 ```
 
-Then, in another terminal, unlock the guest through vphoned:
-
-```sh
-tools/vphoned.sh POST /v1/rpc '{"method":"screen.unlock","params":{},"id":1}'
-```
+The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md).
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [docs/SETUP.md](docs/SETUP.md) | Host requirements, building, creating the VM on a Mac, first boot, tuning, troubleshooting |
+| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup: what you need, creating the VM on a Mac, building, first boot |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
+| [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, the VM's files, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | The TCG performance work, every tuning switch, and how to profile |
 | [docs/TOOLS.md](docs/TOOLS.md) | Each script in `tools/` |
@@ -105,6 +105,7 @@ tools/vphoned.sh POST /v1/rpc '{"method":"screen.unlock","params":{},"id":1}'
 
 ```text
 vphone-linux/
+├── build.sh               builds the submodules and QEMU
 ├── run-vphone.sh          the launcher: a vphone-cli VM bundle -> QEMU command line
 ├── tools/                 test, input, vphoned and profiling scripts (docs/TOOLS.md)
 ├── patches/               small patches for vphone-cli (Mac side)

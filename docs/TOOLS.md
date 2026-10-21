@@ -13,6 +13,15 @@ Common arguments:
 - **Coordinates** are guest pixels on the 1290x2796 grid, whatever `GFX_RES` is. QMP's absolute
   pointer is scaled to the display.
 
+## Setup
+
+| Script | Usage | What it does |
+|---|---|---|
+| `check-host.sh` | `tools/check-host.sh` | Checks this PC against the requirements in SETUP.md (CPU, RAM, `/dev/shm`, Vulkan GPU, `/dev/vhost-vsock`, `vm.max_map_count`, Rust, meson). Changes nothing. |
+| `import-vm.sh` | `tools/import-vm.sh SOURCE NAME` | Copies a vphone-cli VM (a local path or `user@mac:path` over ssh) into `vms/NAME`, sparse, writes its `ecid` file and keeps a `vms/NAME.pristine` copy. |
+
+`../build.sh` builds the submodules and QEMU (see [SETUP.md](SETUP.md#3-build)).
+
 ## Running VMs for tests
 
 | Tool | Usage | What it does |
@@ -36,7 +45,7 @@ Common arguments:
 |---|---|---|
 | `qmp.py` | `tools/qmp.py SOCK shot OUT.png` · `tap X Y` · `swipe X0 Y0 X1 Y1 [MS [STEPS]]` · `home` · `key QCODE...` | Screenshot, tap, swipe (default 300 ms, 20 steps), Home (a middle click, which the touchscreen turns into Cmd+H) and key presses. |
 | `screen-changed.py` | `tools/screen-changed.py SOCK save PATH` · `tools/screen-changed.py SOCK BEFORE.ppm` | Saves a PPM screendump, or exits 0 if the screen now differs clearly from `BEFORE`, else 1. Needs Pillow. |
-| `display-scale.py` | `tools/display-scale.py NVRAM [SCALE]` | Shows or sets iOS's screen scale by patching LLB in `nvram.bin` (`0` restores). Use it with a matching `gfx-res`. See [SETUP.md §8](SETUP.md#8-display-scale). Run it on a stopped VM, and keep a backup. |
+| `display-scale.py` | `tools/display-scale.py NVRAM [SCALE]` | Shows or sets iOS's screen scale by patching LLB in `nvram.bin` (`0` restores). Use it with a matching `gfx-res`. See [ADVANCED.md](ADVANCED.md#display-scale). Run it on a stopped VM, and keep a backup. |
 
 ## Latency and frame-rate benchmarks
 

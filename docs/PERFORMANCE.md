@@ -69,12 +69,12 @@ jumps; an ASID-tagged softmmu TLB, so a context switch costs no full flush.
 
 ### Guest settings
 
-See [SETUP.md §9](SETUP.md#9-recommended-guest-settings):
+See [ADVANCED.md](ADVANCED.md#background-services):
 
 - **Disabling background services** cut idle guest CPU from 92-104 to 32 CPU-seconds per 20 s.
   Before that, SpringBoard was starved: 0 frames during swipes, and widget renderers killed by
   FrontBoard's watchdog.
-- **Display scale** ([SETUP.md §8](SETUP.md#8-display-scale)): 2x needs 2.25x fewer pixels than 3x,
+- **Display scale** ([ADVANCED.md](ADVANCED.md#display-scale)): 2x needs 2.25x fewer pixels than 3x,
   and 1x about 9x fewer. In Settings scrolling the frame rate barely changed (36.6 → 37.9 frames/s
   average, 56 → 66 peak), but vCPU load fell from 50-60% to 40%.
 - **A 1x width that is a multiple of 32** (`448x932`, not `430x932`). NVIDIA's linear images need
@@ -85,7 +85,7 @@ See [SETUP.md §9](SETUP.md#9-recommended-guest-settings):
 
 ### Host GPU
 
-- **Lock the GPU and memory clocks** ([SETUP.md §10](SETUP.md#10-host-gpu-clocks)), again after every
+- **Lock the GPU and memory clocks** ([ADVANCED.md](ADVANCED.md#host-gpu-clocks)), again after every
   host reboot. The bursty load otherwise keeps the GPU at idle clocks (210 MHz). Guest GPU work went
   from 420 µs to 140 µs (median), and the window's draw from about 3 ms (2960 µs) to 388 µs.
 - The metal2vulkan fork keeps 256 released pipeline variants instead of 16 (`M2V_KEPT_PIPELINES`).

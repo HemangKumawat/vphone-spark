@@ -36,6 +36,10 @@ after its VM exits, so give a new VM a new `CID` when you restart quickly.
 **Touches are ignored.** If backboardd logs `ignoring digitizer event ... builtIn: NO`, the
 touchscreen is not marked built-in. Keep `VPHONE_XHCI_NONREMOVABLE` at its default `0x1fe`.
 
+**Touches do nothing on a new VM.** If backboardd logs `ignoring touch event ((backlight dim/off))`,
+the screen has auto-locked and turned off (a new VM locks after 60 s), and iOS drops touches while
+it is off. Wake it with `screen.unlock`, then set Settings › Display & Brightness › Auto-Lock to Never.
+
 **The guest is sluggish at idle.** Disable background services ([ADVANCED.md](ADVANCED.md#background-services)). Look for crash loops with
 the `logs.crashes` RPC, and look for a running ReportCrash.
 
@@ -69,3 +73,39 @@ stalls every vCPU, so timing tools use PPM.
 `GDB=1234` waits for `gdb -ex 'set architecture aarch64' -ex 'target remote :1234'`. Hardware
 breakpoints do not fire on the SEP core (an extra CPU outside the SMP list). `tools/stuck.sh` and
 `tools/firstfault.py` help when a boot stalls.
+
+## Creating the VM on Linux
+
+See [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md) for the steps.
+
+**A Linux restore resets the guest during `NORData`, or the mux logs short packets.** The system's
+usbmuxd is running instead of the 32 KiB one, or the exporter is splitting transfers. Run
+`sudo tools/usbmuxd-32k.sh` (it masks the system unit for this boot only) and use `tools/vusb-usbip.py`
+from this repository.
+
+**After a Linux restore, the VM stays in DFU** (every CPU loops in AVPBooter, `Disk.img` is never
+read). The RestoreOS wrote the firmware store 16 KiB too early, because the `aux-pci` drive had no
+`offset=16384`. Use the current `run-vphone.sh`. A bundle restored without it can be repaired by
+shifting `nvram.bin` 16 KiB forward (16 KiB of zeros, then the first 32 MiB).
+
+**OpenAVB never leaves DFU / `vusb-usbip.py` times out on the reset.** OpenAVB waits for QEMU to
+mark each USB request done in the request descriptor itself (`flags = 0x8000`), not in a register as
+AVPBooter and iBoot do. Use the restore QEMU with the current `hw/vmapple/vusb.c`.
+
+**"Unable to discover device mode" right after `dfu-up.sh`.** An exporter from an earlier run still
+holds 127.0.0.1:3240 for a VM that is gone. The current `dfu-up.sh` stops every old
+`vusb-usbip.py` first.
+
+**iBEC panics with "Kernelcache image not valid" or "TXM image load failed" when booting the SSH
+ramdisk.** idevicerestore retypes restore images when it sends them (`krnl` → `rkrn`,
+`trxm` → `rtrx`), and iBoot checks each against the manifest digest of the retyped bytes. Use
+`tools/restore-tree-mode.sh`, which computes them that way.
+
+**The kernel prints nothing and the ramdisk never shows up.** Check that `fw patch` ran on the tree
+(CREATE-ON-LINUX.md, step 4).
+
+**`cfw install` on Linux says "sshfs did not mount".** Check that the ramdisk is up
+(`tools/ssh-ramdisk.sh id`) and that the guest volumes are mounted where the installer looks
+(`/mnt1`, `/mnt7`, `/mnt6` by default; see CREATE-ON-LINUX.md, step 7). A
+failed run can leave root sshfs mounts under `/var/tmp/vphone-cfw.*`; unmount them with
+`fusermount3 -u` before retrying.

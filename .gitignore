@@ -19,3 +19,11 @@ udid-prediction.txt
 # Profiling output
 perf.data*
 *.perf
+
+# Creating the VM on Linux
+linux-create/.build/
+linux-create/Sources/
+/OpenAVB/
+/OpenSEP/
+/guest-resources
+/.build/

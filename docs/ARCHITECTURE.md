@@ -1,14 +1,14 @@
 # Architecture
 
 ```text
- Mac (once)                                Linux host
- ──────────                                ──────────
+ Linux (linux-create/; or a Mac)           Linux host
+ ───────────────────────────────           ──────────
  vphone-cli: IPSWs -> patched firmware,    run-vphone.sh <vm-dir>
  restore, CFW (vphoned)                      │
    │                                         ▼
    └─ VM bundle ──── copy ──────────▶ qemu-system-aarch64 -M vresearch101 (TCG, apple-gxf CPU)
-      Disk.img, nvram.bin, ROMs,            ├─ 8 AP vCPUs: AVPBooter → iBoot → SPTM/TXM → XNU → iOS
-      SEPStorage, config.plist              ├─ SEP core (own address space, own GICv3): AVPSEPBooter → sepOS
+      Disk.img, nvram.bin, ROMs,            ├─ 8 AP vCPUs: OpenAVB (or AVPBooter) → iBoot → SPTM/TXM → XNU → iOS
+      SEPStorage, config.plist              ├─ SEP core (own address space, own GICv3): OpenSEP (or AVPSEPBooter) → sepOS
                                             ├─ vpiop mailbox (AP ⇄ SEP), VSTR SEP storage
                                             ├─ GICv3 + GICv2m MSI frame, PL011, RTC, cfg, bdif, AES
                                             ├─ PCIe: Apple virtio-blk (root), xHCI (kbd + hub → touchscreen),
@@ -177,9 +177,49 @@ Metal API onto Vulkan. What the `vphone` branch adds:
 
 Every switch is listed in [PERFORMANCE.md](PERFORMANCE.md#launcher-switches).
 
-## Experimental: recovery-mode USB
+## Creating the VM on Linux
 
-`hw/vmapple/vusb.c` (`vresearch-vusb`) models the bdif USB slot (`0x30100000`) that LLB and AVPBooter
-use in recovery and DFU mode. With a blank `Disk.img`, LLB enters recovery mode and enumerates as
-05ac:1281 over a chardev. `tools/vusb-host.py` talks to it, and `tools/vusb-usbip.py` exports it over
-USB/IP. A restore from Linux (libirecovery, idevicerestore) has not been tried.
+The steps are in [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). The parts:
+
+**vphone-cli on Linux** (`linux-create/`). A Swift package that builds vphone-cli 2.12.1's firmware
+tooling (`fw prepare`, `fw patch`, `restore`, `cfw install`, `sign`) on Linux. `sync-sources.sh` links
+vphone-cli's own source files and adds Linux stand-ins for Apple modules (`Shims/`: Darwin, CryptoKit,
+Compression, MachO, ...), whole-file replacements (`overlay/`) and one-line sed edits (`edits/`).
+Fixes it needed on Linux include a `funopen` replacement for glibc, URLSession workarounds for Swift
+6.4.1's Linux Foundation (an invalidated session aborts when freed; per-task delegates are ignored),
+and emulation-length device waits for idevicerestore (`VPHONE_RESTORE_TIMEOUT_SCALE`).
+
+**Boot ROMs.** OpenAVB and OpenSEP (from vphone-cli's release) replace Apple's ROMs, so no file from
+a Mac is needed. OpenAVB loads iLLB from the firmware store in `nvram.bin`, or drops into DFU mode
+when there is none; before it accepts a DFU iBSS, vphone-cli's restore uploads the image's identity
+to it (`openavb.c`), and it only decodes an LZFSE iBSS.
+
+**USB for the restore.** `hw/vmapple/vusb.c` (`vresearch-vusb`) models the bdif USB slot (`0x30100000`)
+that OpenAVB, AVPBooter and iBoot use in DFU and recovery mode. Each request is a descriptor chain in
+guest RAM; on completion the device sets register `0x10` (which AVPBooter and iBoot poll) and also
+writes the first descriptor back (`flags = 0x8000`, and the received length), which is what OpenAVB
+polls; `hw/vmapple/vusb-pci.c` is the RestoreOS's virtio
+USB device controller (QEMU branch `vusb-restore`). Both go to a chardev. `tools/vusb-usbip.py` turns
+that into a USB/IP server on 127.0.0.1, the host attaches it with `usbip` (vhci_hcd), and usbmuxd and
+vphone-cli's idevicerestore see an ordinary USB iPhone: 05ac:1227 (DFU), then 05ac:12a8/12ac (the
+RestoreOS and the SSH ramdisk). Each stage re-enumerates, so `tools/usbip-autoattach.sh` re-attaches.
+
+The RestoreOS's `AppleUSBDeviceMux` is not like usbmuxd's host side: it reads into 32 KiB buffers,
+expects exactly one mux packet per USB transfer and drops shorter transfers without reassembling them.
+So the host needs a usbmuxd built with a 32 KiB MTU (stock: 48 KiB), and the exporter forwards each
+bulk OUT URB whole, together with the zero-length packet that ends it. DFU and recovery keep their
+512-byte split.
+
+**Auxiliary storage.** The RestoreOS writes the firmware store and NVRAM through a virtio-blk drive in
+the aux role. That drive starts 16 KiB into `nvram.bin` (`offset=16384`), after Virtualization.framework's
+header, where AVPBooter reads the store.
+
+**CFW without `mount_apfs`.** The guest's System volume is sealed, and linux-apfs-rw refuses read-write
+mounts of sealed volumes. So `cfw install` boots an SSH ramdisk built from the cloudOS restore ramdisk
+(SSH tools added to the ramdisk and its trust cache, TXM's selector-24 check forced to pass, the
+research kernel as the restore kernel), lets the guest's kernel mount its own volumes read-write, and mounts them on the host
+with sshfs. Bundle signatures use rcodesign, AEA decryption is in process, and the cryptex images are
+mounted read-only with linux-apfs-rw. idevicerestore retypes each restore image as it sends it
+(`krnl` → `rkrn`, `trxm` → `rtrx`, ...), and iBoot checks the image against the manifest digest of
+those retyped bytes, so `tools/restore-tree-mode.sh` hashes them that way. After the install,
+`fw snapshot-flip` renames the restore's root snapshot so the kernel roots the live System volume.

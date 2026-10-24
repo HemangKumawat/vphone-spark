@@ -1,0 +1,12 @@
+# off_t is Int on Linux, Int64 on macOS.
+Transfer/VPhoneIPSWCache.swift	s/actual: info.st_size\)/actual: Int64(info.st_size))/
+# Swift 6.4 Linux Foundation aborts when an invalidated URLSession is torn down (see VPhoneCoreKit.txt).
+Transfer/VPhoneIPSWCache.swift	s/defer \{ session\.invalidateAndCancel\(\) \}/_ = session \/\/ vphone-linux: invalidating a URLSession aborts on Linux Foundation (_MultiHandle retain count)/
+# Linux Foundation never calls didCompleteWithError for a task refused in didReceive(response:)
+# (completionHandler(.cancel)), so the range probe waited forever: return the outcome at once.
+Transfer/VPhoneIPSWCache.swift	s/^( *)completionHandler\(outcome\.accepted \? \.allow : \.cancel\)/\1if !outcome.accepted { continuation?.resume(returning: outcome); continuation = nil }\n\1completionHandler(outcome.accepted ? .allow : .cancel)/
+# Linux Foundation ignores URLSessionTask.delegate: route the tasks' callbacks through a session
+# delegate (Transfer/VPhoneTransferRouter.swift, an overlay file).
+Transfer/VPhoneIPSWCache.swift	s/session: URLSession = URLSession\(configuration: \.ephemeral\),/session: URLSession = VPhoneTransferRouter.session(configuration: .ephemeral),/
+Transfer/VPhoneIPSWCache.swift	s/let session = URLSession\(configuration: configuration\)$/let session = VPhoneTransferRouter.session(configuration: configuration)/
+Transfer/VPhoneIPSWCache.swift	s/^( *)task\.delegate = writer$/\1task.delegate = writer\n\1VPhoneTransferRouter.shared.register(task, writer)/

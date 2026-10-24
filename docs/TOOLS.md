@@ -84,8 +84,28 @@ Common arguments:
 |---|---|---|
 | `im4p_payload.py` | `tools/im4p_payload.py IN.im4p OUT.bin` | Extracts an IM4P payload and LZFSE-decompresses it (needs `liblzfse`). For looking at firmware you extracted yourself. |
 | `vusb-host.py` | `tools/vusb-host.py SOCK STEP...` | Talks to QEMU's `vresearch-vusb` device (the guest's USB device side in recovery/DFU mode) over its chardev, as the USB host would. Steps: `reset`, `setup:<8 hex bytes>`, `xfer:<ep>[:hex]`, `abort:<ep>`, `wait:<s>`. Experimental. |
-| `vusb-usbip.py` | `tools/vusb-usbip.py SOCK` | Exports that device as a USB/IP server on 127.0.0.1:3240 (`usbip list -r 127.0.0.1`). Discovery was verified; attaching and restoring were not. Experimental. |
+| `vusb-usbip.py` | `tools/vusb-usbip.py SOCK` | Exports that device as a USB/IP server on 127.0.0.1:3240 (`usbip list -r 127.0.0.1`). Used by the Linux restore: DFU/recovery transfers are split into 512 bytes, the RestoreOS and SSH-ramdisk stages (05ac:12a8, 12ac) forward each URB whole with its zero-length packet. Experimental. |
 
 Recovery mode: boot a scratch copy of the VM whose `Disk.img` is blank (`truncate -s 1G Disk.img`) with
 `CID=0 ./run-vphone.sh DIR -chardev socket,id=vusb,path=$PWD/vusb.sock,server=on,wait=off -global vresearch-vusb.chardev=vusb`.
 LLB then enters recovery mode and presents the USB device.
+
+## Creating the VM on Linux
+
+Used by [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). The ones marked "root" need sudo.
+
+| Tool | Usage | What it does |
+|---|---|---|
+| `dfu-up.sh` | `tools/dfu-up.sh VM-DIR RUN-DIR` | Starts the VM with the restore QEMU (`qemu-create/build`, or `QEMU=`) and `vusb-usbip.py`: in DFU when `nvram.bin` holds no firmware, at iBoot's recovery prompt when it does and `auto-boot=false`. Stops any older exporter first. `GFX=1 WINDOW=1` opens the display window. Logs to `RUN-DIR`; refuses a disk another QEMU holds. |
+| `restore-tree-mode.sh` | `tools/restore-tree-mode.sh LIB VM ssh\|full` | Switches the restore tree between a full restore and the SSH ramdisk: ramdisk, trust cache, TXM pre-check patch, research restore kernel, and manifest digests over the retyped images. `full` puts the saved files back. No root. |
+| `nvram-autoboot.py` | `tools/nvram-autoboot.py NVRAM [--auto-boot true\|false] [--dry-run]` | Edits the guest's NVRAM banks in `nvram.bin` (stopped VM): sets `auto-boot` and drops the restore's `boot-args`. `false` makes iBoot stop at recovery for the SSH ramdisk; `true` boots the installed system. |
+| `build-usbmuxd-32k.sh` | `tools/build-usbmuxd-32k.sh` | Builds stock usbmuxd with a 32 KiB USB MTU into `.build/usbmuxd-32k/` (no autotools needed). |
+| `usbmuxd-32k.sh` | `sudo tools/usbmuxd-32k.sh` | Root. Stops and runtime-masks the system usbmuxd and runs the 32 KiB one (pidfile `/run/usbmuxd-32k.pid`). |
+| `usbip-autoattach.sh` | `sudo tools/usbip-autoattach.sh` | Root. Attaches whatever the local exporter offers whenever nothing is attached, so each restore stage is picked up. Ctrl-C to stop. |
+| `ssh-ramdisk-inject.sh` | `sudo tools/ssh-ramdisk-inject.sh` | Root. Adds the SSH tools (dropbear and friends) to the extracted cloudOS restore ramdisk. |
+| `ssh-ramdisk-repack.sh` | `tools/ssh-ramdisk-repack.sh [STOCK.dmg] [PAYLOAD] [OUT.dmg]` | Puts the modified APFS payload back into the stock `rdsk` IM4P wrapper. |
+| `ssh-ramdisk-rebuild-signed.sh` | `tools/ssh-ramdisk-rebuild-signed.sh LIB VM` | Rebuilds the ramdisk after the tools are re-signed with `vphone-cli sign --apple-adhoc --merge` (asks for sudo once). |
+| `ssh-ramdisk-trustcache.py` | `tools/ssh-ramdisk-trustcache.py STOCK.rtsc SSH-TREE OUT.rtsc` | Builds the ramdisk's trust cache: the stock entries plus the cdhash of every Mach-O in the SSH tree, sorted. |
+| `ssh-ramdisk.sh` | `tools/ssh-ramdisk.sh 'CMD'` | Runs a command on the booted SSH ramdisk as root, through usbmuxd. |
+| `usbmux-connect.py` | `tools/usbmux-connect.py proxy PORT` | A small iproxy: connects stdin/stdout to a device port through usbmuxd (the ssh ProxyCommand). |
+| `sshfs-remote-sftp.sh` | sshfs `-o ssh_command=tools/sshfs-remote-sftp.sh` | Runs `/usr/libexec/sftp-server` as a command, because the ramdisk's dropbear has no SFTP subsystem. `cfw install` uses it. |

@@ -1,13 +1,14 @@
 # Setup
 
-You create the virtual iPhone **once on a Mac** with vphone-cli, copy it to your **Linux PC**, and run it
-there. After that the Mac is no longer needed.
+You create the virtual iPhone once and run it on your **Linux PC**. It can be created **on Linux
+itself, with no Mac** ([CREATE-ON-LINUX.md](CREATE-ON-LINUX.md)), or with vphone-cli on a Mac and
+copied over (step 1 below).
 
 1. [What you need](#what-you-need)
-2. [On the Mac: create the VM](#1-on-the-mac-create-the-vm)
+2. [Create the VM: on Linux, or on a Mac](#1-create-the-vm-on-linux-or-on-a-mac)
 3. [On Linux: install the dependencies](#2-on-linux-install-the-dependencies)
 4. [Build](#3-build)
-5. [Copy the VM to Linux](#4-copy-the-vm-to-linux)
+5. [Copy the VM to Linux (Mac route only)](#4-copy-the-vm-to-linux-mac-route-only)
 6. [Start it](#5-start-it)
 7. [Make it faster (optional)](#6-make-it-faster-optional)
 
@@ -16,7 +17,10 @@ out (building by hand, the VM's files, the pinned commits) is in [ADVANCED.md](A
 
 ## What you need
 
-**A Mac, once**, to create the VM:
+**To create the VM on Linux** (no Mac): root access, about 45 GB more free disk, Swift 6.4.1 and a
+few packages. [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md#1-extra-dependencies) lists them.
+
+**Or a Mac, once**, to create the VM there:
 
 - An Apple Silicon Mac (M1 or newer) running macOS 15 or newer. A macOS VM does not work.
 - About 100 GB free disk space while creating the VM (firmware and the VM itself).
@@ -43,9 +47,15 @@ No KVM is needed.
 Everything runs under emulation, so expect it to be slower than a real iPhone: apps take a few
 seconds to open and scrolling runs at about 60 frames/s with occasional stutters.
 
-## 1. On the Mac: create the VM
+## 1. Create the VM: on Linux, or on a Mac
 
-Install [vphone-cli](https://github.com/Lakr233/vphone-cli) and create a VM, following its
+**On Linux**, with no Mac: do steps 2 and 3 below first (dependencies and build), then follow
+[CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). It restores Apple's published firmware onto the
+open-source OpenAVB/OpenSEP boot ROMs, installs vphone-cli's custom firmware, and leaves a ready VM in
+`vms/myphone`; then skip to step 5. It takes about an hour plus the downloads, and several steps
+need root.
+
+**On a Mac:** install [vphone-cli](https://github.com/Lakr233/vphone-cli) and create a VM, following its
 [create-and-run guide](https://github.com/Lakr233/vphone-cli/blob/main/Documents/Guides/create-and-run.md):
 
 ```sh
@@ -104,7 +114,7 @@ tools/check-host.sh
 This downloads the three submodules and builds the GPU library and QEMU. The first build takes a
 while (the GPU library is large). Run `./build.sh` again after every `git pull`.
 
-## 4. Copy the VM to Linux
+## 4. Copy the VM to Linux (Mac route only)
 
 ```sh
 tools/import-vm.sh me@my-mac.local:.vphone/machines/myphone myphone

@@ -1,0 +1,3 @@
+# AnyObject has no dynamic isEqual on Linux; compare as one-element NSArrays (same Foundation equality).
+CustomFirmware/CustomFirmwareVirtualAudioGraphConfigurations.swift	s/\(have as AnyObject\)\.isEqual\(want\)/NSArray(object: have).isEqual(to: [want])/
+Binary/IM4PHandler.swift	s/compression: lzfseFourCCs\.contains\(original\.fourcc\) \? "lzfse" : nil,/compression: (lzfseFourCCs.contains(original.fourcc) \&\& ProcessInfo.processInfo.environment["VPHONE_NO_LZFSE"] == nil) ? "lzfse" : nil,/

@@ -28,7 +28,13 @@ MEM=${MEM:-8G}
 
 ecid=$(tr -d ' \n' < "$VM/ecid")
 
-machine="vresearch101,ecid=$ecid,sep-rom=$VM/AVPSEPBooter.vresearch1.bin"
+# The ROM files a machine boots: config.plist's romImages (OpenAVB/OpenSEP for
+# machines made by vphone-cli 2.10+, or on Linux) or Apple's Virtualization.framework names.
+rom_name=$(python3 -c "import plistlib,sys;print((plistlib.load(open(sys.argv[1],'rb')).get('romImages') or {}).get('avpBooter',''))" "$VM/config.plist" 2>/dev/null)
+seprom_name=$(python3 -c "import plistlib,sys;print((plistlib.load(open(sys.argv[1],'rb')).get('romImages') or {}).get('avpSEPBooter',''))" "$VM/config.plist" 2>/dev/null)
+[ -n "$rom_name" ] || rom_name=AVPBooter.vresearch1.bin
+[ -n "$seprom_name" ] || seprom_name=AVPSEPBooter.vresearch1.bin
+machine="vresearch101,ecid=$ecid,sep-rom=$VM/$seprom_name"
 # the serial number Virtualization.framework reported for this machine, if known
 [ -f "$VM/serial" ] && machine+=",serial=$(tr -d ' \n' < "$VM/serial")"
 # TB_SIZE: the TCG code cache in MiB (default 2048, x86-64's limit). An iOS guest keeps ~1.3M
@@ -37,14 +43,19 @@ machine="vresearch101,ecid=$ecid,sep-rom=$VM/AVPSEPBooter.vresearch1.bin"
 args=(
   -accel "tcg,tb-size=${TB_SIZE:-2048}"
   -smp "$SMP,maxcpus=$((SMP + 1))" -m "$MEM"
-  -bios "$VM/AVPBooter.vresearch1.bin"
+  -bios "$VM/$rom_name"
   # nvram.bin is Virtualization.framework aux storage: a 16 KiB header, then
   # the firmware store (HUFA) AVPBooter reads through the backdoor device
-  -drive "file=$VM/nvram.bin,if=pflash,format=raw,offset=16384"
+  -drive "file=$VM/nvram.bin,if=pflash,format=raw,offset=16384,file.locking=off"
   -drive "file=$VM/Disk.img,if=pflash,format=raw,file.locking=off"
   # The firmware backdoor reads this disk during boot; XNU also expects the
   # root APFS disk to be present as an Apple VirtIO PCI storage device.
   -drive "file=$VM/Disk.img,if=none,id=root-pci,format=raw,file.locking=off"
+  # Virtualization.framework also exposes the auxiliary storage as an "aux"
+  # virtio-blk device; the RestoreOS builds its IONVRAM service from it (QEMU branch
+  # vusb-restore). Like the pflash, it starts past the 16 KiB aux-storage header: without the
+  # offset the restore writes the firmware store at byte 0 and the ROM falls back to DFU.
+  -drive "file=$VM/nvram.bin,if=none,id=aux-pci,format=raw,offset=16384,file.locking=off"
   -serial mon:stdio
 )
 # The SEP coprocessor's persistent storage (Virtualization.framework's

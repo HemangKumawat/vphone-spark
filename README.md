@@ -12,7 +12,8 @@ Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **
 
 vphone-cli runs iOS on an Apple Silicon Mac with Apple's Virtualization.framework, on the
 `vresearch101` virtual platform that Apple's Private Cloud Compute (PCC) research VMs use. vphone-linux
-boots the **same VM bundle** on Linux, with no Mac and no Apple code at run time:
+boots the **same VM bundle** on Linux, with no Apple code at run time, and can also **create it on
+Linux with no Mac at all** (see [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)):
 
 - **QEMU** (a fork of [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon)) gains a
   `-M vresearch101` machine and an `apple-gxf` CPU (GXF/SPRR for SPTM and TXM). It runs the guest
@@ -23,8 +24,8 @@ boots the **same VM bundle** on Linux, with no Mac and no Apple code at run time
 - **[metal2vulkan](https://github.com/steelbrain/metal2vulkan)** translates the guest's Metal work to
   Vulkan.
 
-This repository is the glue: the launcher (`run-vphone.sh`), the test and profiling tools (`tools/`) and
-the documentation. The three forks are git submodules (see [Repository layout](#repository-layout)).
+This repository is the glue: the launcher (`run-vphone.sh`), the test and profiling tools (`tools/`),
+the Linux build of vphone-cli's firmware tooling (`linux-create/`) and the documentation. The three forks are git submodules (see [Repository layout](#repository-layout)).
 
 Development updates: [@YahiaDev on X](https://x.com/YahiaDev).
 
@@ -48,6 +49,17 @@ created with vphone-cli 2.9.4.
 - vphoned, vphone-cli's guest daemon, over vsock (port 1339): health, `screen.unlock`, `apps.launch`,
   services, file upload, self-update (`tools/vphoned.sh`, `tools/vphoned-update.sh`).
 
+**Creating the VM on Linux, with no Mac**
+
+- Done end to end on the test PC (2026-10-24), from an empty bundle: vphone-cli 2.12.1's
+  `fw prepare` and `fw patch` built for Linux, a full restore through OpenAVB's DFU mode over USB/IP,
+  vphone-cli's custom firmware installed through an SSH ramdisk, then a boot to the home screen
+  (vphoned answered after 49 s, unlocked after 89 s; the first boot's data migration took about 20
+  minutes more).
+- The boot ROMs are **OpenAVB** and **OpenSEP**, the open-source ROMs vphone-cli ships, in place of
+  Apple's `AVPBooter`/`AVPSEPBooter`. Everything else comes from Apple's published IPSWs and
+  vphone-cli's release zip.
+
 **Known limits**
 
 - **Speed.** The guest's arm64e code runs under TCG (there is no hardware virtualization of arm64 on
@@ -55,8 +67,8 @@ created with vphone-cli 2.9.4.
   (2026-10-19); later TCG work made indirect-branch lookups and TLB refills much cheaper.
   Scrolling Settings now runs at about 60-68 frames/s on average, with occasional 50-110 ms stalls
   (guest CPU work at emulated speed).
-- Creating and restoring the VM needs an **Apple Silicon Mac** with vphone-cli. Restore on Linux is not
-  supported; the recovery-mode USB transport (`tools/vusb-*.py`) is an experiment.
+- Creating the VM on Linux needs root for several steps, about 45 GB free disk, and about an hour
+  plus the downloads; some steps are still manual ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)).
 - Only the NVIDIA host GPU has been tested. reims-vgpu documents what AMD GPUs need (`/dev/udmabuf`).
 - vphoned's `GET /v1/files/content` stops after 64 KiB on the default vhost-vsock datapath; use
   `tools/guest-read.py`, or the `virtio-vsock-uds-pci` device (QEMU branch `vsock-uds`, not merged).
@@ -70,7 +82,8 @@ created with vphone-cli 2.9.4.
 
 You need:
 
-- **An Apple Silicon Mac, once**, to create the VM with vphone-cli. After that the Mac is not needed.
+- **Nothing else to create the VM on Linux** ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)), or an
+  Apple Silicon Mac, once, to create it there with vphone-cli (below).
 - **A Linux x86_64 PC** with a Vulkan GPU (NVIDIA tested), 16 GB RAM or more, and about 60 GB free disk.
 
 ```sh
@@ -85,13 +98,16 @@ tools/import-vm.sh me@my-mac.local:.vphone/machines/myphone myphone
 GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
 ```
 
-The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md).
+The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md). To create the
+VM on Linux instead of on a Mac, follow [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) in place of
+the two Mac lines.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup: what you need, creating the VM on a Mac, building, first boot |
+| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup: what you need, creating the VM, building, first boot |
+| [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) | Creating the VM on Linux with no Mac: firmware, restore over USB/IP, custom firmware |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
 | [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, the VM's files, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |
@@ -107,6 +123,7 @@ vphone-linux/
 ├── build.sh               builds the submodules and QEMU
 ├── run-vphone.sh          the launcher: a vphone-cli VM bundle -> QEMU command line
 ├── tools/                 test, input, vphoned and profiling scripts (docs/TOOLS.md)
+├── linux-create/          vphone-cli's firmware tooling built for Linux (fw, restore, cfw)
 ├── patches/               small patches for vphone-cli (Mac side)
 ├── docs/
 ├── qemu/                  submodule: qemu-vphone, branch vphone
@@ -120,7 +137,9 @@ The submodules are [qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone),
 [reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) and
 [metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan), each on its `vphone` branch.
 reims-vgpu's `Cargo.toml` takes metal2vulkan from `../metal2vulkan`, so the submodules must stay side by
-side as above. vphone-cli is not a submodule: it runs on the Mac, from its own releases.
+side as above. vphone-cli is not a submodule: on a Mac it
+runs from its own releases, and `linux-create/sync-sources.sh` builds its firmware tooling from a
+vphone-cli 2.12.1 checkout without changing its files.
 
 ## Credits
 
@@ -136,10 +155,11 @@ side as above. vphone-cli is not a submodule: it runs on the Mac, from its own r
 
 ## Legal
 
-This project contains **no Apple software**. It does not ship or download firmware, IPSWs, ROMs,
+This project contains **no Apple software**. It does not ship firmware, IPSWs, ROMs,
 kernelcaches or VM images, and the emulator uses no code from Virtualization.framework. You create
-your own VM with vphone-cli on your own Mac, from firmware Apple publishes, and you copy it to your
-own Linux machine.
+your own VM from firmware Apple publishes, on Linux or with vphone-cli on your own Mac. On Linux,
+vphone-cli's tooling downloads the IPSWs you name from Apple's servers, and the VM boots on the
+open-source OpenAVB/OpenSEP ROMs from vphone-cli's release.
 
 Apple's software licenses restrict where and how its operating systems may run. Running an iOS or
 PCC guest outside Virtualization.framework on a Mac may not be permitted by those terms. vphone-cli

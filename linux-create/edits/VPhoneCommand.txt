@@ -1,0 +1,22 @@
+# Linux URLResourceValues has no volumeAvailableCapacityForImportantUsage; use the volume's available capacity.
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/resourceValues\(forKeys: \[\.volumeAvailableCapacityForImportantUsageKey\]\)/resourceValues(forKeys: [.volumeAvailableCapacityKey])/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/\.volumeAvailableCapacityForImportantUsage \?\? 0/.volumeAvailableCapacity.map(Int64.init) ?? 0/
+# fw aea-decrypt (overlay Firmware/VPhoneFirmwareAEADecryptCommand.swift): aea decrypt on Linux.
+Firmware/VPhoneFirmwareCommand.swift	s/^( *)VPhoneFirmwareAEAKeyCommand\.self,$/\1VPhoneFirmwareAEAKeyCommand.self,\n\1VPhoneFirmwareAEADecryptCommand.self,/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/50 \* 1024 \* 1024 \* 1024/20 * 1024 * 1024 * 1024/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s#/private/var/tmp#/var/tmp#
+Firmware/VPhoneCustomFirmwareInstaller.swift	s#/usr/sbin/lsof#/usr/bin/lsof#g
+Firmware/VPhoneCustomFirmwareInstaller.swift	s#/sbin/umount#/usr/bin/umount#g
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private struct WorkDirectory/struct WorkDirectory/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func makeWorkDirectory/func makeWorkDirectory/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func removeWorkDirectory/func removeWorkDirectory/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func tool\(/func tool(/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func restoreTree/func restoreTree/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func applyGuestPatches/func applyGuestPatches/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func patchPreboot/func patchPreboot/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func recordGuestReceipt/func recordGuestReceipt/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func installSignedDaemonCopy/func installSignedDaemonCopy/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func configuredGuestDevice/func configuredGuestDevice/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func guestDevice/func guestDevice/
+Firmware/VPhoneCustomFirmwareInstaller.swift	s/private func stageBoardDeviceTree/func stageBoardDeviceTree/
+Host/VPhoneHostAutomationProbe.swift	/var noSigPipe/,/^        \}$/d

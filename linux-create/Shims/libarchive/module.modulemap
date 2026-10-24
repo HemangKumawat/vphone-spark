@@ -1,0 +1,5 @@
+module libarchive [system] {
+    header "shim.h"
+    link "archive"
+    export *
+}

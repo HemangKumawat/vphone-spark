@@ -1,0 +1,16 @@
+# glibc has no funopen; Bridge/funopen_compat.c provides it.
+Bridge/vphone_restore_bridge.c	43i #include "funopen_compat.h"
+# Diagnostics: VPHONE_RESTORE_BOOT_ARGS_EXTRA is appended to the restore boot-args.
+Recovery/recovery.c	37a #include "vphone_linux_bootargs.h"
+Recovery/recovery.c	s/client->restore_boot_args = strdup\(("rd=md0[^"]*")\);/client->restore_boot_args = vphone_linux_boot_args(\1);/
+# Scale idevicerestore's device-event waits for emulation (Core/vphone_linux_timeout.h).
+Recovery/recovery.c	24a #include "vphone_linux_timeout.h"
+Recovery/recovery.c	s/cond_wait_timeout\((\&client->device_event_cond, \&client->device_event_mutex), ([0-9]+)\)/cond_wait_timeout(\1, vphone_linux_timeout(\2))/g
+Recovery/dfu.c	24a #include "vphone_linux_timeout.h"
+Recovery/dfu.c	s/cond_wait_timeout\((\&client->device_event_cond, \&client->device_event_mutex), ([0-9]+)\)/cond_wait_timeout(\1, vphone_linux_timeout(\2))/g
+Core/idevicerestore.c	25a #include "vphone_linux_timeout.h"
+Core/idevicerestore.c	s/cond_wait_timeout\((\&client->device_event_cond, \&client->device_event_mutex), ([0-9]+)\)/cond_wait_timeout(\1, vphone_linux_timeout(\2))/g
+Recovery/normal.c	24a #include "vphone_linux_timeout.h"
+Recovery/normal.c	s/cond_wait_timeout\((\&client->device_event_cond, \&client->device_event_mutex), ([0-9]+)\)/cond_wait_timeout(\1, vphone_linux_timeout(\2))/g
+Transfer/restore.c	25a #include "vphone_linux_timeout.h"
+Transfer/restore.c	s/cond_wait_timeout\((\&client->device_event_cond, \&client->device_event_mutex), ([0-9]+)\)/cond_wait_timeout(\1, vphone_linux_timeout(\2))/g

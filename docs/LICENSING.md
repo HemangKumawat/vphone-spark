@@ -5,11 +5,13 @@ advice; each project's own license files are authoritative.
 
 | Part | Where | License |
 |---|---|---|
-| Glue: `run-vphone.sh`, `tools/`, `docs/`, `patches/` | this repository | **MIT** ([`LICENSE`](../LICENSE)) |
+| Glue: `run-vphone.sh`, `tools/`, `docs/`, `patches/`, `linux-create/` | this repository | **MIT** ([`LICENSE`](../LICENSE)) |
 | QEMU fork | `qemu/` submodule: [qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone), a fork of [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon) | **GPL-3.0** overall. The upstream project's own code: **AGPL-3.0**. QEMU's code keeps its original licenses, mostly GPL-2.0-or-later. The files vphone-linux added (`hw/vmapple/vresearch101.c`, `vpiop.c`, `sep-storage.c`, ...) carry `SPDX-License-Identifier: GPL-2.0-or-later` headers. See `qemu/LICENSE` and `qemu/COPYING*`. |
 | reims-vgpu fork | `reims-vgpu/` submodule ([YahiaAngelo/reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu)) | **GPL-2.0-or-later OR LGPL-3.0-or-later** (`reims-vgpu/LICENSE`, `LICENSES/`) |
 | metal2vulkan fork | `metal2vulkan/` submodule ([YahiaAngelo/metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan)) | **GPL-2.0-or-later OR LGPL-3.0-or-later** (`metal2vulkan/LICENSE`) |
-| vphone-cli | not included (used on the Mac) | MIT |
+| vphone-cli | not included: used on the Mac, or linked from a checkout by `linux-create/sync-sources.sh` | MIT |
+| `linux-create/` | this repository (Linux build files, shims, overlays and edits for vphone-cli) | **MIT**; its overlays are modified vphone-cli files, also MIT |
+| OpenAVB, OpenSEP | not included: unzipped from vphone-cli's release by the user | See each one's `LICENSE` (OpenAVB includes APSL-2.0 parts) |
 
 ## Notes
 

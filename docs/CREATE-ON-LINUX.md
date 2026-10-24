@@ -87,13 +87,24 @@ ls -l ipsws/      # 11254382122 and 1199454323 bytes
 
 If you already have them elsewhere (another disk is fine), use those paths below instead.
 
-**2.2 Start the USB helpers** (root, in two terminals, and leave them running through step 5; both
-the GPU driver below and the restore in step 3 need them):
+**2.2 Start the USB helpers.** Both the GPU driver below and the restore in step 3 need them; leave
+them running through step 5.
+
+In **your main shell** (it starts the daemon in the background and returns):
 
 ```sh
 sudo tools/usbmuxd-32k.sh          # stops and runtime-masks the system usbmuxd, runs the 32 KiB one
+```
+
+In **a second terminal** (it keeps running until Ctrl-C), from the same `vphone-linux` directory:
+
+```sh
 sudo tools/usbip-autoattach.sh     # attaches the VM's USB device at each stage (DFU, iBEC, RestoreOS)
 ```
+
+Keep working in your main shell: the `VC` variable above and the `vms/myphone` paths are set up
+there. Running the attacher in the main shell would block it, and a new shell would not have `VC`
+(set it again there if you do switch).
 
 **2.3 Get the GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key
 server no longer gives out the key for 23E5207q, so take it from a stock cloudOS restore instead, as

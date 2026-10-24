@@ -135,14 +135,16 @@ def macho_cdhashes(path):
             primary = sb[blob_off:blob_off + length]
         if primary is None:
             continue
-        # CodeDirectory.flags at +12, hashType at +37.  The restore cache's
-        # entries are SHA-1 (20-byte cdhash, hash_type=2), matching the
-        # staging tree's ldid-shaped signatures.
-        if primary[37] != 1:
-            print(f"warn: {path}: non-SHA1 CodeDirectory (hashType={primary[37]}), skipped",
+        # CodeDirectory.hashType at +37: 1 = SHA-1 (the cdhash is the SHA-1 of the
+        # CodeDirectory), 2 = SHA-256 (the cdhash is its SHA-256, cut to 20 bytes,
+        # as in the stock entries). Trust-cache entries hold 20 bytes either way.
+        if primary[37] == 1:
+            yield hashlib.sha1(primary).digest()
+        elif primary[37] == 2:
+            yield hashlib.sha256(primary).digest()[:20]
+        else:
+            print(f"warn: {path}: CodeDirectory hashType {primary[37]} not supported, skipped",
                   file=sys.stderr)
-            continue
-        yield hashlib.sha1(primary).digest()
 
 
 def main():

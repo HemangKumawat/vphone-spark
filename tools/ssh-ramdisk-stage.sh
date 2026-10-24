@@ -6,8 +6,8 @@
 # Downloads ssh.tar.gz (dropbear, bash, coreutils, sftp-server, ... for iOS) from
 # github.com/verygenericname/sshtars at a pinned commit and checks its SHA-256. This repository does
 # not redistribute those binaries. Then:
-#   - removes usr/lib/libresolv.9.dylib (the ramdisk's own, already trust-cached copy is used),
-#     usr/share/misc/magic.mgc and usr/trollstore/ (not needed);
+#   - removes usr/share/misc/magic.mgc and usr/trollstore/ (not needed). It keeps
+#     usr/lib/libresolv.9.dylib: sftp-server needs it, and the stock restore ramdisk has none.
 # The binaries stay exactly as they ship (they are not re-signed): they run because
 # tools/ssh-ramdisk-trustcache.py adds their code hashes to the ramdisk's trust cache and
 # `fw patch --restore-txm-precheck` lets TXM admit them (tools/restore-tree-mode.sh does both).
@@ -32,7 +32,7 @@ sha256sum "$CACHE" | grep -q "^$SHA256" || { echo "$CACHE: unexpected SHA-256" >
 echo "=== unpacking into $OUT"
 mkdir -p "$OUT"
 tar -xzf "$CACHE" -C "$OUT"
-rm -f "$OUT/usr/lib/libresolv.9.dylib" "$OUT/usr/share/misc/magic.mgc"
+rm -f "$OUT/usr/share/misc/magic.mgc"
 rm -rf "$OUT/usr/trollstore"
 
 echo "=== $OUT: $(find "$OUT" -type f | wc -l) files"

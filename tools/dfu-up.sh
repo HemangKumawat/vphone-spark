@@ -32,6 +32,8 @@ for p in $(pgrep -x qemu-system-aar || true); do
     echo "refusing: pid $p already runs $VM/Disk.img" >&2; exit 2
   fi
 done
+QEMU_BIN=${QEMU:-$PWD/qemu/build/qemu-system-aarch64}
+[ -x "$QEMU_BIN" ] || { echo "QEMU is not built: $QEMU_BIN is missing. Run ./build.sh first (docs/SETUP.md, step 3)." >&2; exit 1; }
 rm -f "$SOCK"
 (QEMU=${QEMU:-$PWD/qemu/build/qemu-system-aarch64} CID=0 SMP=${SMP:-8} \
   GFX=${GFX:-0} WINDOW=${WINDOW:-0} \

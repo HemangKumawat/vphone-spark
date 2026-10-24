@@ -11,6 +11,10 @@ open-source replacements for Apple's `AVPBooter` and `AVPSEPBooter` that vphone-
 > Every input is made by a script in `tools/` or downloaded from its source; nothing comes from a
 > Mac. Several steps need root, so the route is still a series of commands rather than one.
 
+**Before you start:** do [SETUP.md](SETUP.md) steps 2 and 3 first: install its packages, clone
+this repository, and run `./build.sh`. That fetches the submodules and builds QEMU and the GPU
+library, which every step below uses (the restores run in QEMU too). Then come back here.
+
 Something not working? The Linux-creation entries in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#creating-the-vm-on-linux)
 cover what went wrong on the test PC.
 
@@ -95,7 +99,13 @@ cp $R/OpenAVB/OpenAVB.bin OpenAVB/ && cp $R/OpenSEP/OpenSEP.bin OpenSEP/
 
 The release and the vphone-cli checkout must be the same version.
 
-**QEMU** is the one `./build.sh` builds: its `vphone` branch also has the virtual USB device
+**QEMU** is the one `./build.sh` builds ([SETUP.md](SETUP.md#3-build)); check that it exists:
+
+```sh
+ls qemu/build/qemu-system-aarch64     # missing? run ./build.sh first
+```
+
+Its `vphone` branch also has the virtual USB device
 controllers a restore needs (`hw/vmapple/vusb.c`, which OpenAVB, iBoot and AVPBooter drive in DFU
 and recovery mode, and `hw/vmapple/vusb-pci.c`, the RestoreOS's virtio USB controller) and the
 auxiliary virtio-blk drive.

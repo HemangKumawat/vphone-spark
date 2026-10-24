@@ -220,20 +220,22 @@ These made the biggest difference on the test PC:
 1. **In the iPhone's Settings:** Accessibility > Motion > **Reduce Motion** on; Accessibility >
    Display & Text Size > **Reduce Transparency** on; Display & Brightness > **Auto-Lock: Never**.
 2. **Render at 1x** instead of 3x, about 9 times fewer pixels with the same layout. With the VM
-   stopped:
+   running:
 
    ```sh
-   python3 tools/display-scale.py vms/myphone/nvram.bin 1
-   echo 448x932 > vms/myphone/gfx-res
+   tools/set-scale.sh vms/myphone 1
    ```
 
-   Then, with the VM running, restore the boot Apple logo, which iOS has no 1x image for:
+   It clears the screen scale iOS has cached, shuts the VM down, patches the scale and sets the
+   matching display size. Start the VM again, and once it is up, give it a boot Apple logo (iOS has
+   none for 1x, so the boot screen stays black without it):
 
    ```sh
-   python3 tools/guest-1x-logo.py 3
+   GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
+   python3 tools/guest-1x-logo.py 3       # from a second terminal, once it is up
    ```
 
-   `python3 tools/display-scale.py vms/myphone/nvram.bin 0` and deleting `gfx-res` undo the scale.
+   `tools/set-scale.sh vms/myphone 3` goes back to 3x.
 3. **Turn off background services** the VM doesn't need for app testing (iCloud, Siri, analytics...).
    More are listed in [ADVANCED.md](ADVANCED.md#background-services).
 

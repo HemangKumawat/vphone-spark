@@ -36,6 +36,11 @@ after its VM exits, so give a new VM a new `CID` when you restart quickly.
 **Touches are ignored.** If backboardd logs `ignoring digitizer event ... builtIn: NO`, the
 touchscreen is not marked built-in. Keep `VPHONE_XHCI_NONREMOVABLE` at its default `0x1fe`.
 
+**Everything is zoomed in after switching to 1x.** iOS kept the 3x scale it cached at an earlier
+boot (MobileGestalt's `ArtworkDeviceScaleFactor`). Use `tools/set-scale.sh vms/myphone 1` with the
+VM running: it clears that cache before shutting down. On a VM that is already zoomed, run it again
+(it is safe to repeat), then start the VM.
+
 **Touches do nothing on a new VM.** If backboardd logs `ignoring touch event ((backlight dim/off))`,
 the screen has auto-locked and turned off (a new VM locks after 60 s), and iOS drops touches while
 it is off. Wake it with `screen.unlock`, then set Settings › Display & Brightness › Auto-Lock to Never.

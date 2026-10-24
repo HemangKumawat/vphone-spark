@@ -77,19 +77,26 @@ framebuffer with a lower UI scale gives the same 430x932-point layout with far f
 | Scale | `gfx-res` | Pixels vs 3x |
 |---|---|---|
 | 3x (default) | 1290x2796 | 1 |
-| 2x | 860x1864 | 1/2.25 |
+| 2x | 896x1864 (860 rounded up to a multiple of 32) | about 1/2.2 |
 | 1x | 448x932 (430x932 rounded up to a multiple of 32) | about 1/8.6 |
 
 The scale comes from LLB, which fills `/chosen/display-scale` from the boot video settings.
 `tools/display-scale.py` patches that one instruction in the firmware store inside `nvram.bin`. This
-is the same patch vphone-cli applies for iPads (`IBootPatchDisplayScale`). Stop the VM first and keep
-a backup of `nvram.bin`:
+is the same patch vphone-cli applies for iPads (`IBootPatchDisplayScale`).
+
+**iOS also caches the scale.** MobileGestalt keeps what it worked out at an earlier boot
+(`ArtworkDeviceScaleFactor` in
+`/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`),
+and vphoned clears that cache only when the device tree changes, which a scale change does not. With
+the stale cache, a VM patched to 1x boots with a 3x interface on the 1x screen: everything zoomed in.
+`tools/set-scale.sh VM 1|2|3` does the whole change with the VM running: it deletes the cache through
+vphoned, shuts the guest down, patches LLB and writes `gfx-res`. By hand, delete that file (vphoned's
+`files.remove`, `force`) before shutting down, then:
 
 ```sh
 python3 tools/display-scale.py vms/myphone/nvram.bin        # show the current state
-python3 tools/display-scale.py vms/myphone/nvram.bin 1      # 1x
+python3 tools/display-scale.py vms/myphone/nvram.bin 1      # 1x (0 goes back to 3x)
 echo 448x932 > vms/myphone/gfx-res                          # matching display size
-python3 tools/display-scale.py vms/myphone/nvram.bin 0      # undo (back to 3x)
 ```
 
 Measured on Settings scrolling with a quiet guest: 3x 36.6 frames/s average with about 50-60% vCPU load,

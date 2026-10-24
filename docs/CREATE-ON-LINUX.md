@@ -317,16 +317,8 @@ Then, on a new VM:
   the screen off after 60 s, and iOS then drops every touch (backboardd logs
   `ignoring touch event ((backlight dim/off))`): it looks as if touch is broken. `screen.unlock`
   wakes it. vphoned's `display.auto_lock.set` did not change the effective value on the test VM.
-- **Lower the display scale.** A new VM draws at iOS's default 3x (1290x2796). Shut it down, then
-  patch LLB to 1x and set the matching display size ([ADVANCED.md](ADVANCED.md#display-scale)):
-
-  ```sh
-  tools/vphoned.sh POST /v1/rpc '{"method":"system.shutdown","params":{"force":true},"id":1}'
-  python3 tools/display-scale.py vms/myphone/nvram.bin 1
-  echo 448x932 > vms/myphone/gfx-res
-  ```
-
-  Then, with the VM running again, `python3 tools/guest-1x-logo.py 3` restores the boot Apple logo.
-
-  On the test host the Linux-made VM then booted at 1x to the home screen (vphoned at 68 s,
-  unlocked at 153 s).
+- **Lower the display scale** (optional): a new VM draws at iOS's default 3x (1290x2796). With the
+  VM running, `tools/set-scale.sh vms/myphone 1`, then start it again and run
+  `python3 tools/guest-1x-logo.py 3` ([SETUP.md step 7](SETUP.md#7-make-it-faster-optional)). On the
+  test host the Linux-made VM then booted at 1x to the home screen (vphoned at 68 s, unlocked at
+  153 s).

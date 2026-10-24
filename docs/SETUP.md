@@ -10,7 +10,8 @@ copied over (step 1 below).
 4. [Build](#3-build)
 5. [Copy the VM to Linux (Mac route only)](#4-copy-the-vm-to-linux-mac-route-only)
 6. [Start it](#5-start-it)
-7. [Make it faster (optional)](#6-make-it-faster-optional)
+7. [Run your own app](#6-run-your-own-app)
+8. [Make it faster (optional)](#7-make-it-faster-optional)
 
 Something not working? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Every detail this guide leaves
 out (building by hand, the VM's files, the pinned commits) is in [ADVANCED.md](ADVANCED.md).
@@ -160,7 +161,24 @@ tools/vphoned.sh POST /v1/rpc '{"method":"system.shutdown","params":{"force":tru
 
 or press Ctrl-A then X in the terminal QEMU runs in.
 
-## 6. Make it faster (optional)
+## 6. Run your own app
+
+Build an iOS app on Linux with [xtool](https://github.com/xtool-org/xtool) and run it in the VM. No
+Apple ID or signing is needed: vphoned signs the app inside the guest when it installs it.
+
+```sh
+xtool new HelloVPhone && cd HelloVPhone
+xtool dev build --ipa                     # -> xtool/HelloVPhone.ipa, unsigned
+../tools/install-ipa.py xtool/HelloVPhone.ipa --launch com.example.HelloVPhone
+```
+
+`xtool setup` installs the Darwin SDK it needs once (it asks for Xcode's `.xip`, which you download
+from Apple). On the test PC the sample app built in 9 s, installed in 2 s and opened in the window,
+where taps reach it:
+
+<img src="screenshots/xtool-app.png" width="260" alt="A SwiftUI app built with xtool on Linux, running in the VM">
+
+## 7. Make it faster (optional)
 
 These made the biggest difference on the test PC:
 

@@ -48,6 +48,9 @@ created with vphone-cli 2.9.4.
   shortcut (the guest does not start its own home gesture from this touchscreen).
 - vphoned, vphone-cli's guest daemon, over vsock (port 1339): health, `screen.unlock`, `apps.launch`,
   services, file upload, self-update (`tools/vphoned.sh`, `tools/vphoned-update.sh`).
+- Your own apps: an iOS app built on Linux with [xtool](https://github.com/xtool-org/xtool) installs
+  and runs with `tools/install-ipa.py`, no Apple ID or signing needed
+  ([docs/SETUP.md](docs/SETUP.md#6-run-your-own-app)).
 
 **Creating the VM on Linux, with no Mac**
 

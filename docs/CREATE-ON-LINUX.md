@@ -8,7 +8,8 @@ open-source replacements for Apple's `AVPBooter` and `AVPSEPBooter` that vphone-
 > **Status (2026-10-24):** done end to end on the test host. A blank bundle was restored through
 > OpenAVB's DFU mode, given the CFW, and booted to the home screen: vphoned answered 49 s after start,
 > the lock screen unlocked at 89 s, and the first boot's data migration took about 20 minutes more.
-> Several steps are still manual; the TODOs below mark them.
+> Every input is made by a script in `tools/` or downloaded from its source; nothing comes from a
+> Mac. Several steps need root, so the route is still a series of commands rather than one.
 
 Something not working? The Linux-creation entries in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#creating-the-vm-on-linux)
 cover what went wrong on the test PC.
@@ -35,14 +36,16 @@ VC=$PWD/linux-create/.build/out/out/Products/Debug-linux-x86_64/vphone-cli
 On top of the packages in [SETUP.md](SETUP.md#2-on-linux-install-the-dependencies) (Fedora names):
 
 ```sh
-sudo dnf install usbip fuse-sshfs fuse3 7zip kernel-devel \
-  libusb1-devel libplist-devel libimobiledevice-glue-devel openssl-devel libcurl-devel
+sudo dnf install usbip fuse-sshfs fuse3 7zip kernel-devel unzip curl zstd \
+  libusb1-devel libplist-devel libimobiledevice-glue-devel openssl-devel libcurl-devel \
+  libimobiledevice-devel libusbmuxd-devel libtatsu-devel libarchive-devel
 ```
 
 - **Swift 6.4.1** for Linux (tested with `swift-6.4.1-RELEASE`, installed with
   [swiftly](https://www.swift.org/install/linux/)).
 - **rcodesign** (apple-codesign 0.29.0) for the bundle seals the CFW makes:
-  `cargo install apple-codesign --locked`. The installer runs `~/.cargo/bin/rcodesign`.
+  `cargo install apple-codesign --locked`. The installer finds it on `PATH`, in `~/.cargo/bin` of
+  the user who ran sudo, or at `$VPHONE_RCODESIGN`.
 - **linux-apfs-rw** ([github.com/linux-apfs/linux-apfs-rw](https://github.com/linux-apfs/linux-apfs-rw)),
   built against the running kernel into `.build/linux-apfs-rw/`. The CFW install mounts the cryptex
   images read-only with it (it tries `modprobe apfs`, then `$VPHONE_APFS_KO`, then
@@ -55,7 +58,9 @@ sudo dnf install usbip fuse-sshfs fuse3 7zip kernel-devel \
 - **Network.** The IPSWs come from Apple's CDN (about 1-3 MiB/s on the test host; the 11.3 GB
   iPhone IPSW took about an hour).
 
-TODO (release): check this list on a clean install.
+Checked in a clean Fedora 44 container (2026-10-24): every package above and in SETUP.md installs,
+every library `linux-create` links against is then present, and `tools/build-usbmuxd-32k.sh`
+builds. The Swift and Rust builds themselves were checked on the test PC only.
 
 ## 2. Build vphone-cli for Linux and usbmuxd
 

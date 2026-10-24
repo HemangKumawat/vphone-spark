@@ -70,8 +70,8 @@ created with vphone-cli 2.9.4.
   (2026-10-19); later TCG work made indirect-branch lookups and TLB refills much cheaper.
   Scrolling Settings now runs at about 60-68 frames/s on average, with occasional 50-110 ms stalls
   (guest CPU work at emulated speed).
-- Creating the VM on Linux needs root for several steps, about 45 GB free disk, and about an hour
-  plus the downloads; some steps are still manual ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)).
+- Creating the VM needs root for several steps, about 45 GB free disk, and about an hour plus the
+  downloads ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)).
 - Only the NVIDIA host GPU has been tested. reims-vgpu documents what AMD GPUs need (`/dev/udmabuf`).
 - vphoned's `GET /v1/files/content` stops after 64 KiB on the default vhost-vsock datapath; use
   `tools/guest-read.py`, or the `virtio-vsock-uds-pci` device (QEMU branch `vsock-uds`, not merged).
@@ -83,36 +83,30 @@ created with vphone-cli 2.9.4.
 
 ## Quick start
 
-You need:
-
-- **Nothing else to create the VM on Linux** ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)), or an
-  Apple Silicon Mac, once, to create it there with vphone-cli (below).
-- **A Linux x86_64 PC** with a Vulkan GPU (NVIDIA tested), 16 GB RAM or more, and about 60 GB free disk.
+You need a Linux x86_64 PC with a Vulkan GPU (NVIDIA tested), 16 GB RAM or more, about 100 GB free
+disk, and sudo. No Mac.
 
 ```sh
-# On the Mac: create the VM (vphone-cli's guide has the details)
-vphone-cli vm create myphone --iphone-source iPhone17,3_Restore.ipsw --cloudos-source cloudOS.ipsw
-
-# On Linux: build, copy the VM from the Mac, start it
 git clone https://github.com/YahiaAngelo/vphone-linux.git && cd vphone-linux
 tools/check-host.sh
-./build.sh
-tools/import-vm.sh me@my-mac.local:.vphone/machines/myphone myphone
+./build.sh                                  # QEMU and the GPU library
+# then build the VM-creation tools and create the VM: docs/SETUP.md steps 3-4
 GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
 ```
 
-The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md). To create the
-VM on Linux instead of on a Mac, follow [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) in place of
-the two Mac lines.
+The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md). Already have
+a VM made with vphone-cli on a Mac? [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) shows how to bring
+it over instead.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup: what you need, creating the VM, building, first boot |
-| [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) | Creating the VM on Linux with no Mac: firmware, restore over USB/IP, custom firmware |
+| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup on Linux: what you need, dependencies, building, creating the VM, first boot, your own apps |
+| [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) | SETUP's step 4 in detail: firmware, restore over USB/IP, custom firmware, first boot |
+| [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) | Optional: creating the VM with vphone-cli on a Mac and copying it over |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
-| [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, the VM's files, display scale, services, GPU clocks |
+| [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | The TCG performance work, every tuning switch, and how to profile |
 | [docs/TOOLS.md](docs/TOOLS.md) | Each script in `tools/` |

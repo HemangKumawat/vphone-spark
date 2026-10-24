@@ -102,10 +102,10 @@ ramdisk.** idevicerestore retypes restore images when it sends them (`krnl` → 
 `tools/restore-tree-mode.sh`, which computes them that way.
 
 **The kernel prints nothing and the ramdisk never shows up.** Check that `fw patch` ran on the tree
-(CREATE-ON-LINUX.md, step 4).
+(CREATE-ON-LINUX.md, step 2).
 
 **`cfw install` on Linux says "sshfs did not mount".** Check that the ramdisk is up
 (`tools/ssh-ramdisk.sh id`) and that the guest volumes are mounted where the installer looks
-(`/mnt1`, `/mnt7`, `/mnt6` by default; see CREATE-ON-LINUX.md, step 7). A
+(`/mnt1`, `/mnt7`, `/mnt6` by default; see CREATE-ON-LINUX.md, step 5). A
 failed run can leave root sshfs mounts under `/var/tmp/vphone-cfw.*`; unmount them with
 `fusermount3 -u` before retrying.

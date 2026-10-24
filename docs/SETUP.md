@@ -1,79 +1,48 @@
 # Setup
 
-You create the virtual iPhone once and run it on your **Linux PC**. It can be created **on Linux
-itself, with no Mac** ([CREATE-ON-LINUX.md](CREATE-ON-LINUX.md)), or with vphone-cli on a Mac and
-copied over (step 1 below).
+From an empty Linux PC to an iPhone home screen in a window, with no Mac: you install the
+dependencies, build vphone-linux, create the virtual iPhone from Apple's published firmware, and
+start it.
 
-1. [What you need](#what-you-need)
-2. [Create the VM: on Linux, or on a Mac](#1-create-the-vm-on-linux-or-on-a-mac)
-3. [On Linux: install the dependencies](#2-on-linux-install-the-dependencies)
-4. [Build](#3-build)
-5. [Copy the VM to Linux (Mac route only)](#4-copy-the-vm-to-linux-mac-route-only)
-6. [Start it](#5-start-it)
-7. [Run your own app](#6-run-your-own-app)
-8. [Make it faster (optional)](#7-make-it-faster-optional)
+1. [What you need](#1-what-you-need)
+2. [Install the dependencies](#2-install-the-dependencies)
+3. [Build](#3-build)
+4. [Create the VM](#4-create-the-vm)
+5. [Start it](#5-start-it)
+6. [Run your own app](#6-run-your-own-app)
+7. [Make it faster (optional)](#7-make-it-faster-optional)
 
 Something not working? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Every detail this guide leaves
-out (building by hand, the VM's files, the pinned commits) is in [ADVANCED.md](ADVANCED.md).
+out (building by hand, display scale, services, the pinned commits) is in [ADVANCED.md](ADVANCED.md).
 
-## What you need
+> Already have a VM made with vphone-cli on a Mac? [CREATE-ON-MAC.md](CREATE-ON-MAC.md) replaces
+> step 4; everything else here is the same.
 
-**To create the VM on Linux** (no Mac): root access, about 45 GB more free disk, Swift 6.4.1 and a
-few packages. [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md#1-extra-dependencies) lists them.
-
-**Or a Mac, once**, to create the VM there:
-
-- An Apple Silicon Mac (M1 or newer) running macOS 15 or newer. A macOS VM does not work.
-- About 100 GB free disk space while creating the VM (firmware and the VM itself).
-- An internet connection: the restore fetches signing tickets from Apple.
-- vphone-cli's security settings (SIP's research-guest mode), set once from macOS Recovery. See
-  [vphone-cli's requirements](https://github.com/Lakr233/vphone-cli#requirements).
-
-**A Linux PC** to run it:
+## 1. What you need
 
 | | Minimum | Recommended |
 |---|---|---|
 | CPU | x86_64, 8 threads | 8 or more fast cores (speed per core matters most) |
 | RAM | 16 GB | 32 GB |
 | GPU | A Vulkan GPU | NVIDIA (the only vendor tested so far) |
-| Disk | 60 GB free | SSD, 100 GB free |
+| Disk | 100 GB free, btrfs or XFS | SSD, 150 GB free |
 | OS | Any recent 64-bit distribution | Fedora (the only one tested so far) |
+
+- **Root** (sudo) for a few steps while creating the VM.
+- **An internet connection**: about 13 GB of firmware comes from Apple's servers.
+- **Disk:** the builds take about 15 GB; creating the VM needs about 45 GB on a file system with
+  reflink copies (btrfs, XFS), not tmpfs; the finished VM uses about 16 GB.
 
 The minimum column is an estimate: vphone-linux was tested on one PC so far (Fedora 44, Intel
 i7-14700K, 62 GB RAM, RTX 4080 SUPER). Reports from other hardware are welcome. On a CPU with fewer
-than 8 cores, start the VM with fewer virtual CPUs (`SMP=4`). AMD GPUs need
-access to `/dev/udmabuf` ([reims-vgpu's notes](https://github.com/steelbrain/reims-vgpu#readme)).
-No KVM is needed.
+than 8 cores, start the VM with fewer virtual CPUs (`SMP=4`). AMD GPUs need access to
+`/dev/udmabuf` ([reims-vgpu's notes](https://github.com/steelbrain/reims-vgpu#readme)). No KVM is
+needed.
 
 Everything runs under emulation, so expect it to be slower than a real iPhone: apps take a few
 seconds to open and scrolling runs at about 60 frames/s with occasional stutters.
 
-## 1. Create the VM: on Linux, or on a Mac
-
-**On Linux**, with no Mac: do steps 2 and 3 below first (dependencies and build), then follow
-[CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). It restores Apple's published firmware onto the
-open-source OpenAVB/OpenSEP boot ROMs, installs vphone-cli's custom firmware, and leaves a ready VM in
-`vms/myphone`; then skip to step 5. It takes about an hour plus the downloads, and several steps
-need root.
-
-**On a Mac:** install [vphone-cli](https://github.com/Lakr233/vphone-cli) and create a VM, following its
-[create-and-run guide](https://github.com/Lakr233/vphone-cli/blob/main/Documents/Guides/create-and-run.md):
-
-```sh
-vphone-cli host preflight
-vphone-cli vm create myphone \
-  --iphone-source /path/to/iPhone17,3_Restore.ipsw \
-  --cloudos-source /path/to/cloudOS.ipsw
-```
-
-Tested with vphone-linux: vphone-cli 2.9.4, iPhone17,3 iOS **26.6.2 (23G90)** with cloudOS
-**26.4 (23E5207q)**. vphone-cli's [compatibility list](https://github.com/Lakr233/vphone-cli/blob/main/Documents/Guides/compatibility.md)
-has the other firmware pairs.
-
-The VM ends up in `~/.vphone/machines/myphone/` on the Mac. Make sure it is stopped
-(`vphone-cli vm stop myphone`), and don't run the same copy on the Mac and on Linux.
-
-## 2. On Linux: install the dependencies
+## 2. Install the dependencies
 
 On Fedora:
 
@@ -81,14 +50,24 @@ On Fedora:
 sudo dnf install git gcc gcc-c++ clang binutils make cmake ninja-build meson python3 rsync \
   glib2-devel pixman-devel lzfse-devel libslirp-devel libssh-devel libzstd-devel \
   nettle-devel gnutls-devel gtk3-devel sdl2-compat-devel bzip2-devel \
-  libX11-devel wayland-devel libxkbcommon-devel \
-  vulkan-loader vulkan-loader-devel vulkan-tools socat python3-pillow
+  libX11-devel libXScrnSaver-devel wayland-devel libxkbcommon-devel \
+  vulkan-loader vulkan-loader-devel vulkan-tools socat python3-pillow \
+  usbip fuse-sshfs fuse3 7zip kernel-devel unzip curl zstd \
+  libusb1-devel libplist-devel libimobiledevice-glue-devel openssl-devel libcurl-devel \
+  libimobiledevice-devel libusbmuxd-devel libtatsu-devel libarchive-devel
 ```
 
-On other distributions, install the same packages under their names there.
+On other distributions, install the same packages under their names there. (Checked in a clean
+Fedora 44 container: they all install, every library the build links against is then present, and the GPU library's SDL window code configures.)
 
-Install Rust with [rustup](https://rustup.rs), then set two system options. They are permanent, so
-this is needed only once:
+Then:
+
+- **Rust**, with [rustup](https://rustup.rs).
+- **Swift 6.4.1** for Linux, with [swiftly](https://www.swift.org/install/linux/) (tested with
+  `swift-6.4.1-RELEASE`). It builds vphone-cli's firmware tools.
+- **rcodesign**, which signs app bundles while the VM is created: `cargo install apple-codesign --locked`.
+
+Set two system options. They are permanent, so this is needed only once:
 
 ```sh
 echo vhost_vsock | sudo tee /etc/modules-load.d/vhost-vsock.conf
@@ -106,7 +85,11 @@ cd vphone-linux
 tools/check-host.sh
 ```
 
+All commands from here on run in this `vphone-linux` directory.
+
 ## 3. Build
+
+**QEMU and the GPU library:**
 
 ```sh
 ./build.sh
@@ -115,14 +98,65 @@ tools/check-host.sh
 This downloads the three submodules and builds the GPU library and QEMU. The first build takes a
 while (the GPU library is large). Run `./build.sh` again after every `git pull`.
 
-## 4. Copy the VM to Linux (Mac route only)
+The rest of this step builds the tools that create the VM.
+
+**vphone-cli's firmware tools, for Linux** (`linux-create/`, about 5 minutes):
 
 ```sh
-tools/import-vm.sh me@my-mac.local:.vphone/machines/myphone myphone
+git clone https://github.com/Lakr233/vphone-cli.git && git -C vphone-cli checkout 2.12.1
+cd linux-create
+VPHONE_CLI=../vphone-cli ./sync-sources.sh
+swift build --build-system swiftbuild --scratch-path .build/out
+cd ..
 ```
 
-This copies the VM from the Mac over ssh into `vms/myphone` (a USB drive path works too) and prepares
-it. It also keeps an untouched copy, `vms/myphone.pristine`, to start over from.
+**vphone-cli's release files.** Download
+[VPhone-2.12.1.zip](https://github.com/Lakr233/vphone-cli/releases/download/2.12.1/VPhone-2.12.1.zip)
+from [vphone-cli's 2.12.1 release](https://github.com/Lakr233/vphone-cli/releases/tag/2.12.1). It is
+the macOS app; nothing in it runs here, but it carries the open-source boot ROMs (OpenAVB and OpenSEP)
+and the iPhone-side programs the VM gets (vphoned and others):
+
+```sh
+curl -L -o .build/VPhone-2.12.1.zip https://github.com/Lakr233/vphone-cli/releases/download/2.12.1/VPhone-2.12.1.zip
+mkdir -p .build/vphone-release-2.12.1/app
+unzip -q .build/VPhone-2.12.1.zip -d .build/vphone-release-2.12.1/app
+R=.build/vphone-release-2.12.1/app/VPhone.bundle/Contents/Resources
+ln -sfn $R/guest-resources guest-resources
+mkdir -p OpenAVB OpenSEP
+cp $R/OpenAVB/OpenAVB.bin OpenAVB/ && cp $R/OpenSEP/OpenSEP.bin OpenSEP/
+```
+
+The release and the vphone-cli checkout must be the same version.
+
+**The APFS driver** ([linux-apfs-rw](https://github.com/linux-apfs/linux-apfs-rw)), which reads the
+firmware's disk images, built for the running kernel:
+
+```sh
+git clone https://github.com/linux-apfs/linux-apfs-rw.git .build/linux-apfs-rw
+make -C .build/linux-apfs-rw          # -> .build/linux-apfs-rw/apfs.ko, loaded when needed
+```
+
+Rebuild it after a kernel update.
+
+**usbmuxd with 32 KiB packets**, which the restore needs (the stock one breaks it):
+
+```sh
+tools/build-usbmuxd-32k.sh            # -> .build/usbmuxd-32k/usbmuxd
+```
+
+## 4. Create the VM
+
+Follow [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). In short, it:
+
+1. makes an empty VM;
+2. downloads Apple's iPhone and cloudOS firmware and patches it;
+3. restores it into the VM, over a virtual USB connection;
+4. starts a small SSH system in the VM and installs vphone-cli's custom firmware (vphoned and the
+   patches the VM needs);
+5. boots the finished VM for the first time.
+
+It takes about an hour plus the downloads, and asks for sudo a few times. You end up with
+`vms/myphone`, already at the lock screen; continue with step 5.
 
 ## 5. Start it
 
@@ -140,8 +174,8 @@ Start the VM:
 GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
 ```
 
-A window opens with the iPhone's screen; the terminal shows the boot log. The first boot takes 3-5
-minutes to the lock screen. Then unlock it, from a second terminal:
+A window opens with the iPhone's screen; the terminal shows the boot log. It takes 1-3 minutes to
+the lock screen. Then unlock it, from a second terminal:
 
 ```sh
 tools/vphoned.sh POST /v1/rpc '{"method":"screen.unlock","params":{},"id":1}'
@@ -151,7 +185,8 @@ If it answers "Lock Screen did not dismiss in time", wait 15 seconds and run it 
 the bottom of the screen also works.
 
 **Using it:** click to tap, drag to scroll, swipe up from the bottom edge (or middle-click) to go
-Home.
+Home. If clicks do nothing, the screen has gone to sleep: run the unlock command again, and set
+Auto-Lock to Never (step 7).
 
 **Stopping it:**
 
@@ -200,7 +235,6 @@ These made the biggest difference on the test PC:
 
    `python3 tools/display-scale.py vms/myphone/nvram.bin 0` and deleting `gfx-res` undo the scale.
 3. **Turn off background services** the VM doesn't need for app testing (iCloud, Siri, analytics...).
-   vphone-cli's default `vm create` already turns off about 140 of them. More are listed in
-   [ADVANCED.md](ADVANCED.md#background-services).
+   More are listed in [ADVANCED.md](ADVANCED.md#background-services).
 
 [PERFORMANCE.md](PERFORMANCE.md) explains where the time goes and every tuning switch.

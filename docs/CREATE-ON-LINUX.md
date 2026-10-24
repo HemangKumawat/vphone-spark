@@ -11,23 +11,20 @@ open-source replacements for Apple's `AVPBooter` and `AVPSEPBooter` that vphone-
 > Every input is made by a script in `tools/` or downloaded from its source; nothing comes from a
 > Mac. Several steps need root, so the route is still a series of commands rather than one.
 
-**Before you start:** do [SETUP.md](SETUP.md) steps 2 and 3 first: install its packages, clone
-this repository, and run `./build.sh`. That fetches the submodules and builds QEMU and the GPU
-library, which every step below uses (the restores run in QEMU too). Then come back here.
+**Before you start:** do [SETUP.md](SETUP.md) steps 1-3 (dependencies and builds). This page is
+step 4 of that guide.
 
 Something not working? The Linux-creation entries in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#creating-the-vm-on-linux)
 cover what went wrong on the test PC.
 
 The steps:
 
-1. [Extra dependencies](#1-extra-dependencies)
-2. [Build vphone-cli for Linux and usbmuxd](#2-build-vphone-cli-for-linux-and-usbmuxd)
-3. [Make an empty VM bundle](#3-make-an-empty-vm-bundle)
-4. [Download and patch the firmware](#4-download-and-patch-the-firmware)
-5. [Restore over USB/IP](#5-restore-over-usbip)
-6. [Boot the SSH ramdisk](#6-boot-the-ssh-ramdisk)
-7. [Install the CFW](#7-install-the-cfw)
-8. [Finish and first boot](#8-finish-and-first-boot)
+1. [Make an empty VM bundle](#1-make-an-empty-vm-bundle)
+2. [Download and patch the firmware](#2-download-and-patch-the-firmware)
+3. [Restore over USB/IP](#3-restore-over-usbip)
+4. [Boot the SSH ramdisk](#4-boot-the-ssh-ramdisk)
+5. [Install the CFW](#5-install-the-cfw)
+6. [Finish and first boot](#6-finish-and-first-boot)
 
 Everything below uses `vms/` as the library and `myphone` as the VM. `VC` is the Linux vphone-cli:
 
@@ -35,96 +32,13 @@ Everything below uses `vms/` as the library and `myphone` as the VM. `VC` is the
 VC=$PWD/linux-create/.build/out/out/Products/Debug-linux-x86_64/vphone-cli
 ```
 
-## 1. Extra dependencies
-
-On top of the packages in [SETUP.md](SETUP.md#2-on-linux-install-the-dependencies) (Fedora names):
-
-```sh
-sudo dnf install usbip fuse-sshfs fuse3 7zip kernel-devel unzip curl zstd \
-  libusb1-devel libplist-devel libimobiledevice-glue-devel openssl-devel libcurl-devel \
-  libimobiledevice-devel libusbmuxd-devel libtatsu-devel libarchive-devel
-```
-
-- **Swift 6.4.1** for Linux (tested with `swift-6.4.1-RELEASE`, installed with
-  [swiftly](https://www.swift.org/install/linux/)).
-- **rcodesign** (apple-codesign 0.29.0) for the bundle seals the CFW makes:
-  `cargo install apple-codesign --locked`. The installer finds it on `PATH`, in `~/.cargo/bin` of
-  the user who ran sudo, or at `$VPHONE_RCODESIGN`.
-- **linux-apfs-rw** ([github.com/linux-apfs/linux-apfs-rw](https://github.com/linux-apfs/linux-apfs-rw)),
-  built against the running kernel into `.build/linux-apfs-rw/`. The CFW install mounts the cryptex
-  images read-only with it (it tries `modprobe apfs`, then `$VPHONE_APFS_KO`, then
-  `.build/linux-apfs-rw/apfs.ko`).
-- **Root** for: the usbmuxd swap, USB/IP attach, building the SSH ramdisk, and `cfw install`.
-- **Disk space: about 45 GB free** on a reflink-capable file system (btrfs, XFS), not tmpfs. The
-  restore tree takes about 12 GB, the restored disk about 9 GB and 15-16 GB after the CFW, and the
-  CFW install needs about 8 GB of scratch space in `/var/tmp`. **A restore failed at 12%
-  (`format_media`) with 17 GB free and passed with 27 GB.**
-- **Network.** The IPSWs come from Apple's CDN (about 1-3 MiB/s on the test host; the 11.3 GB
-  iPhone IPSW took about an hour).
-
-Checked in a clean Fedora 44 container (2026-10-24): every package above and in SETUP.md installs,
-every library `linux-create` links against is then present, and `tools/build-usbmuxd-32k.sh`
-builds. The Swift and Rust builds themselves were checked on the test PC only.
-
-## 2. Build vphone-cli for Linux and usbmuxd
-
-**vphone-cli.** `linux-create/` builds vphone-cli **2.12.1**'s firmware tooling (`fw`, `restore`,
-`cfw`, `sign`, ...) for Linux without changing vphone-cli's files: `sync-sources.sh` links them from
-a vphone-cli checkout and adds Linux stand-ins (`Shims/`), replacement files (`overlay/`) and
-one-line edits (`edits/`).
-
-```sh
-git clone https://github.com/Lakr233/vphone-cli.git && git -C vphone-cli checkout 2.12.1
-cd linux-create
-VPHONE_CLI=../vphone-cli ./sync-sources.sh
-swift build --build-system swiftbuild --scratch-path .build/out
-cd ..
-```
-
-**The vphone-cli release bundle.** Download vphone-cli's **2.12.1** release zip (the macOS app; it is
-only unzipped here, nothing in it runs on the host). It provides:
-
-- `OpenAVB/OpenAVB.bin` and `OpenSEP/OpenSEP.bin`, the boot ROMs;
-- `guest-resources/`, the prebuilt arm64e guest binaries the CFW installs (vphoned, the launchd hook,
-  the sound driver and others).
-
-```sh
-mkdir -p .build/vphone-release-2.12.1/app
-unzip -q VPhone-2.12.1.zip -d .build/vphone-release-2.12.1/app
-R=.build/vphone-release-2.12.1/app/VPhone.bundle/Contents/Resources
-ln -sfn $R/guest-resources guest-resources
-mkdir -p OpenAVB OpenSEP
-cp $R/OpenAVB/OpenAVB.bin OpenAVB/ && cp $R/OpenSEP/OpenSEP.bin OpenSEP/
-```
-
-The release and the vphone-cli checkout must be the same version.
-
-**QEMU** is the one `./build.sh` builds ([SETUP.md](SETUP.md#3-build)); check that it exists:
-
-```sh
-ls qemu/build/qemu-system-aarch64     # missing? run ./build.sh first
-```
-
-Its `vphone` branch also has the virtual USB device
-controllers a restore needs (`hw/vmapple/vusb.c`, which OpenAVB, iBoot and AVPBooter drive in DFU
-and recovery mode, and `hw/vmapple/vusb-pci.c`, the RestoreOS's virtio USB controller) and the
-auxiliary virtio-blk drive.
-
-**The 32 KiB usbmuxd.** The RestoreOS's `AppleUSBDeviceMux` reads 32 KiB buffers and drops a USB
-transfer that does not hold exactly one mux packet. Stock usbmuxd sends 48 KiB packets, which reset
-the guest mid-restore. Build a copy with a 32 KiB MTU once:
-
-```sh
-tools/build-usbmuxd-32k.sh        # -> .build/usbmuxd-32k/usbmuxd
-```
-
-## 3. Make an empty VM bundle
+## 1. Make an empty VM bundle
 
 ```sh
 tools/new-vm.sh vms/myphone          # a random ECID; or: tools/new-vm.sh vms/myphone <ECID in hex>
 ```
 
-It writes what vphone-cli's `vm new` would, with the ROMs from step 2:
+It writes what vphone-cli's `vm new` would, with the ROMs from [SETUP.md](SETUP.md#3-build) step 3:
 
 | File | Contents |
 |---|---|
@@ -144,7 +58,7 @@ With an empty `nvram.bin`, OpenAVB finds no firmware to boot and drops into DFU 
 Use fresh zeroed `SEPStorage` for each new restore. A VM whose SEP storage had been through many
 restores panicked in the SEP key store at its first boot (`SEP Panic: :sks`).
 
-## 4. Download and patch the firmware
+## 2. Download and patch the firmware
 
 The VM is made from two of Apple's firmware files (IPSWs), the pair vphone-cli recommends and that
 was tested end to end:
@@ -159,7 +73,7 @@ Both come straight from Apple's update servers; vphone-cli lists the same links 
 cloudOS that still has the `vphone600ap` firmware the VM needs, so later cloudOS versions don't
 work. Other iOS versions may work with it but were not tested here (`$VC fw catalog`).
 
-**4.1 Download them** into an `ipsws/` folder in this checkout (git ignores it). `-C -` resumes a
+**2.1 Download them** into an `ipsws/` folder in this checkout (git ignores it). `-C -` resumes a
 broken download; the iPhone file took about an hour on the test PC:
 
 ```sh
@@ -173,15 +87,15 @@ ls -l ipsws/      # 11254382122 and 1199454323 bytes
 
 If you already have them elsewhere (another disk is fine), use those paths below instead.
 
-**4.2 Start the USB helpers** (root, in two terminals, and leave them running through step 7; both
-the GPU driver below and the restore in step 5 need them):
+**2.2 Start the USB helpers** (root, in two terminals, and leave them running through step 5; both
+the GPU driver below and the restore in step 3 need them):
 
 ```sh
 sudo tools/usbmuxd-32k.sh          # stops and runtime-masks the system usbmuxd, runs the 32 KiB one
 sudo tools/usbip-autoattach.sh     # attaches the VM's USB device at each stage (DFU, iBEC, RestoreOS)
 ```
 
-**4.3 Get the GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key
+**2.3 Get the GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key
 server no longer gives out the key for 23E5207q, so take it from a stock cloudOS restore instead, as
 vphone-cli does on a Mac:
 
@@ -195,7 +109,7 @@ System volume with 7-Zip (no root, no mount), and deletes the VM. It needs about
 runs. On the test PC it gave the same driver as vphone-cli on a Mac (SHA-1 `b5d95b38…`). You need it
 once; keep `drivers/` for later VMs.
 
-**4.4 Merge and patch the firmware** into the VM from step 3:
+**2.4 Merge and patch the firmware** into the VM from step 1:
 
 ```sh
 $VC fw prepare -l vms myphone \
@@ -207,7 +121,7 @@ $VC fw patch -l vms myphone
 `fw prepare` merges both IPSWs into a restore tree inside the VM (`vms/myphone/*_Restore`, about
 12 GB); `fw patch` patches its boot chain. After that the IPSWs are only needed to make another VM,
 so you can move or delete them. (`-i` and `-c` also take the URLs directly; vphone-cli then
-downloads into `~/.vphone/ipsws`. Step 4.3 needs the cloudOS file on disk, so the explicit download
+downloads into `~/.vphone/ipsws`. Step 2.3 needs the cloudOS file on disk, so the explicit download
 is simpler.)
 
 - **Run `fw patch` every time after `fw prepare`.** `fw prepare` writes stock firmware; on the test
@@ -218,7 +132,7 @@ is simpler.)
 - Don't set `VPHONE_NO_LZFSE`: OpenAVB only accepts an LZFSE-compressed iBSS, which `fw patch`
   writes by default.
 
-## 5. Restore over USB/IP
+## 3. Restore over USB/IP
 
 The restore runs vphone-cli's idevicerestore against the guest, which QEMU presents as a USB device:
 
@@ -228,7 +142,7 @@ guest (OpenAVB DFU → iBSS/iBEC → RestoreOS)
        └─ usbip attach (vhci_hcd) ──▶ usbmuxd (32 KiB) ──▶ vphone-cli restore
 ```
 
-1. Keep the two USB helpers from step 4.2 running.
+1. Keep the two USB helpers from step 2.2 running.
 
 2. Start the VM in DFU (add `GFX=1 WINDOW=1` to watch it in a window):
 
@@ -243,6 +157,9 @@ guest (OpenAVB DFU → iBSS/iBEC → RestoreOS)
    VPHONE_RESTORE_TIMEOUT_SCALE=10 $VC restore -l vms myphone -v
    ```
 
+   Keep at least 25 GB free on the disk holding `vms/` while it runs: on the test PC a restore
+   failed at 12% (`format_media`) with 17 GB free and passed with 27 GB.
+
    A good run logs `Describing iBSS to OpenAVB`, ends with `Status: Restore Finished`, and leaves a
    firmware store in `nvram.bin` (`HUFA` at 0x4000, iLLB, `auto-boot=true`). Stop the VM afterwards.
    `VPHONE_RESTORE_TIMEOUT_SCALE` stretches idevicerestore's device waits for emulation.
@@ -252,14 +169,14 @@ On the test host one restore attempt failed early (the NVRAM recorded
 restore hangs at "Waiting for device to enter restore mode", stop it, zero `nvram.bin` again and
 retry.
 
-## 6. Boot the SSH ramdisk
+## 4. Boot the SSH ramdisk
 
 Linux cannot write the guest's System volume: it is sealed, and linux-apfs-rw refuses read-write
 mounts of sealed volumes. So the guest's own kernel mounts its volumes from an SSH ramdisk (dropbear,
 `root`/`alpine`), and the CFW install reaches them over sshfs.
 
 **Build the SSH ramdisk image** once per firmware, while the restore tree is still in full mode
-(right after step 5):
+(right after step 3):
 
 ```sh
 tools/ssh-ramdisk-stage.sh                              # -> runs/sshramdisk/ssh-root
@@ -304,7 +221,7 @@ after that; once `ssh-ramdisk.sh` works, it can be stopped.
 Preboot `disk1s5` at `/mnt6`, and xART `disk1s3` at `/mnt7` (it holds the gigalocker, a 6 MB
 `<uuid>.gl`). Check with `/sbin/mount` and `ls`: the device numbers differ between restores.
 
-## 7. Install the CFW
+## 5. Install the CFW
 
 With the ramdisk up and its volumes mounted:
 
@@ -320,6 +237,9 @@ sudo $VC cfw install -l vms myphone --work-parent /var/tmp --keep-artifacts
 - It decrypts the OS and App cryptexes in process, mounts them read-only with linux-apfs-rw, and
   copies them into System. That took about 16 minutes on the test host. The App cryptex is many
   small files, and the host disk barely grows for minutes at a time while it copies; it is not stuck.
+- It needs rcodesign (found on `PATH`, in `~/.cargo/bin` of the user who ran sudo, or at
+  `$VPHONE_RCODESIGN`) and the APFS driver from SETUP step 3 (`modprobe apfs`, else
+  `$VPHONE_APFS_KO`, else `.build/linux-apfs-rw/apfs.ko`), and about 8 GB free in `/var/tmp`.
 - It renames the xART gigalocker to `AA.gl`, installs vphoned and the launchd hook, and ends with
   `[+] Linux guest install complete` and a new `PatchReceipt.plist`.
 - Without `--keep-artifacts` the restore tree is deleted at the end (12 GB back; a new restore then
@@ -328,7 +248,7 @@ sudo $VC cfw install -l vms myphone --work-parent /var/tmp --keep-artifacts
 If an install fails halfway, look for leftover root sshfs mounts (`findmnt -l | grep vphone-cfw`)
 and unmount them with `fusermount3 -u` before retrying.
 
-## 8. Finish and first boot
+## 6. Finish and first boot
 
 1. Unmount the guest volumes from the ramdisk so nothing is lost, then stop the VM:
 

@@ -14,7 +14,15 @@ SRC=${1:?usage: tools/import-vm.sh SOURCE NAME}; NAME=${2:?usage: tools/import-v
 DST=vms/$NAME
 [ -e "$DST" ] && { echo "$DST already exists" >&2; exit 1; }
 mkdir -p "$DST"
-for f in Disk.img nvram.bin AVPBooter.vresearch1.bin AVPSEPBooter.vresearch1.bin SEPStorage config.plist; do
+rsync -aS "${SRC%/}/config.plist" "$DST/"
+# The boot ROMs config.plist names: OpenAVB.bin/OpenSEP.bin on vphone-cli 2.10+, else Apple's.
+roms=$(python3 -I - "$DST/config.plist" <<'PY'
+import plistlib, sys
+r = plistlib.load(open(sys.argv[1], "rb")).get("romImages") or {}
+print(r.get("avpBooter") or "AVPBooter.vresearch1.bin", r.get("avpSEPBooter") or "AVPSEPBooter.vresearch1.bin")
+PY
+)
+for f in Disk.img nvram.bin SEPStorage $roms; do
   rsync -aS --info=progress2 "${SRC%/}/$f" "$DST/"
 done
 # The launcher needs the machine's ECID, which config.plist stores in machineIdentifier.

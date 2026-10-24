@@ -64,74 +64,10 @@ make -C reims-vgpu && ninja -C qemu/build qemu-system-aarch64
 If ninja does not notice the new archive, remove the binary first:
 `rm qemu/build/qemu-system-aarch64 && ninja -C qemu/build qemu-system-aarch64`.
 
-## The VM on the Mac
+## A VM made on a Mac
 
-The tested VM:
-
-- vphone-cli **2.9.4**.
-- iPhone restore IPSW **iPhone17,3 26.6.2 (23G90)** with the cloudOS IPSW **26.4 (23E5207q)**. Per
-  vphone-cli's compatibility notes, 26.4-23E5207q is the newest cloudOS that has the `vphone600ap`
-  identity the guest needs.
-- vphone-cli's custom firmware (CFW) installed, which provides vphoned in the guest. vphone-linux's tools
-  use vphoned to unlock the guest, launch apps and change services.
-- The bundle was copied to Linux **before its first boot on the Mac**.
-
-vphone-cli 2.9 creates machines from templates by default, and a template clone "gets a new ECID,
-UDID and MAC address on its first start". Check that a clone that never started on the Mac carries
-its final identity in `config.plist` before you rely on it. Not yet documented: the exact
-`vphone-cli vm create` options used for the test VM (with or without `--no-template`, and the
-preset).
-
-If `cfw install` refuses with "Less than 50 GiB of disk space" on an external drive or a disk image
-that has the space, `patches/vphone-cli-cfw-freespace.patch` makes vphone-cli fall back to the
-volume's plain available capacity. It is a local patch for vphone-cli, not part of vphone-cli.
-
-Do not boot the same bundle on the Mac and on Linux. If you want a Mac reference boot, boot a clone.
-
-With vphone-cli's default `vm create`, the VM boots once on the Mac to check it works, then stops,
-and `tools/import-vm.sh` copies it after that. The test VM was copied before any boot on the Mac. Both
-should work, but only the second was tested.
-
-## The VM's files
-
-`tools/import-vm.sh` does these steps.
-
-vphone-cli keeps machines under `~/.vphone/machines/<name>/` by default (or in the library given with
-`-l`). The launcher needs these files from the bundle, in one directory:
-
-| File | What it is |
-|---|---|
-| `Disk.img` | the 64 GB root disk (sparse) |
-| `nvram.bin` | Virtualization.framework's auxiliary storage: a 16 KiB header, then the firmware store AVPBooter reads |
-| `AVPBooter.vresearch1.bin` | the AP boot ROM |
-| `AVPSEPBooter.vresearch1.bin` | the SEP boot ROM |
-| `SEPStorage` | the SEP's persistent storage (512 KiB) |
-| `config.plist` | the machine's configuration: screen size, machine identifier |
-
-Copy the bundle **sparse**, for example with `rsync -aS`. A plain copy writes all 64 GB.
-
-Then add the files vphone-linux reads that vphone-cli does not write:
-
-- **`ecid`** (required): the machine's ECID in hex, from `config.plist`'s `machineIdentifier`:
-
-  ```sh
-  VM=vms/myphone
-  python3 -c 'import plistlib,sys; d=plistlib.load(open(sys.argv[1],"rb")); print(hex(plistlib.loads(d["machineIdentifier"])["ECID"]))' \
-    $VM/config.plist > $VM/ecid
-  ```
-
-- **`serial`** (optional): the serial number Virtualization.framework reports for this machine.
-  The recovery-mode USB serial string shows it as `SRNM:[...]`. Not yet documented: where to read it
-  on a normally booted machine.
-- **`gfx-res`** (optional): the display size in pixels. `448x932` is the recommended size at 1x
-  (see [Display scale](#display-scale)).
-  The default is the bundle's `screenConfig`, 1290x2796.
-
-Keep a pristine copy before the first boot. On btrfs or XFS, reflink copies cost nothing:
-`cp -a --reflink=always vms/myphone vms/myphone.pristine`.
-
-Never commit or publish anything from the bundle: it holds Apple firmware and your machine's identity.
-`.gitignore` excludes `vms/`.
+Creating the VM with vphone-cli on a Mac, copying it over, and the files the launcher needs from it
+are in [CREATE-ON-MAC.md](CREATE-ON-MAC.md).
 
 ## Display scale
 

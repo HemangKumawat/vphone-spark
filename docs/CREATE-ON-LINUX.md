@@ -136,28 +136,70 @@ restores panicked in the SEP key store at its first boot (`SEP Panic: :sks`).
 
 ## 4. Download and patch the firmware
 
-The tested pairing: iPhone17,3 **26.6.2 (23G90)** with cloudOS **26.4 (23E5207q)**.
+The VM is made from two of Apple's firmware files (IPSWs), the pair vphone-cli recommends and that
+was tested end to end:
+
+| File | Size | Download |
+|---|---|---|
+| iPhone 16 (iPhone17,3) iOS **26.6.2 (23G90)** | 11.3 GB | [iPhone17,3_26.6.2_23G90_Restore.ipsw](https://updates.cdn-apple.com/2026SummerFCS/29d685ce-f70d-45a0-9823-b1cd115f3927/iPhone17,3_26.6.2_23G90_Restore.ipsw) |
+| cloudOS **26.4 beta (23E5207q)** | 1.2 GB | [cloudOS 26.4 23E5207q](https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64) (the link has no file name; save it as below) |
+
+Both come straight from Apple's update servers; vphone-cli lists the same links (`$VC fw urls
+--device iPhone17,3`, and its firmware catalog for the cloudOS). The cloudOS 26.4 beta is the newest
+cloudOS that still has the `vphone600ap` firmware the VM needs, so later cloudOS versions don't
+work. Other iOS versions may work with it but were not tested here (`$VC fw catalog`).
+
+**4.1 Download them** into an `ipsws/` folder in this checkout (git ignores it). `-C -` resumes a
+broken download; the iPhone file took about an hour on the test PC:
+
+```sh
+mkdir -p ipsws
+curl -L -C - -o ipsws/iPhone17,3_26.6.2_23G90_Restore.ipsw \
+  'https://updates.cdn-apple.com/2026SummerFCS/29d685ce-f70d-45a0-9823-b1cd115f3927/iPhone17,3_26.6.2_23G90_Restore.ipsw'
+curl -L -C - -o ipsws/cloudOS-26.4-23E5207q.ipsw \
+  'https://updates.cdn-apple.com/private-cloud-compute/c0ecdb4b310cf5239ab2b248dd3098eec297dc5aa3bbe6ada27273262b0b8b64'
+ls -l ipsws/      # 11254382122 and 1199454323 bytes
+```
+
+If you already have them elsewhere (another disk is fine), use those paths below instead.
+
+**4.2 Start the USB helpers** (root, in two terminals, and leave them running through step 7; both
+the GPU driver below and the restore in step 5 need them):
+
+```sh
+sudo tools/usbmuxd-32k.sh          # stops and runtime-masks the system usbmuxd, runs the 32 KiB one
+sudo tools/usbip-autoattach.sh     # attaches the VM's USB device at each stage (DFU, iBEC, RestoreOS)
+```
+
+**4.3 Get the GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key
+server no longer gives out the key for 23E5207q, so take it from a stock cloudOS restore instead, as
+vphone-cli does on a Mac:
+
+```sh
+tools/gpu-driver-from-cloudos.sh ipsws/cloudOS-26.4-23E5207q.ipsw drivers/
+# -> drivers/AppleParavirtGPUMetalIOGPUFamily.bundle
+```
+
+This restores the stock cloudOS into a temporary VM (about 20 minutes), reads the driver from its
+System volume with 7-Zip (no root, no mount), and deletes the VM. It needs about 5 GB free while it
+runs. On the test PC it gave the same driver as vphone-cli on a Mac (SHA-1 `b5d95b38…`). You need it
+once; keep `drivers/` for later VMs.
+
+**4.4 Merge and patch the firmware** into the VM from step 3:
 
 ```sh
 $VC fw prepare -l vms myphone \
-  -i iPhone17,3_26.6.2_23G90_Restore.ipsw -c <cloudOS 26.4 23E5207q IPSW> \
+  -i ipsws/iPhone17,3_26.6.2_23G90_Restore.ipsw -c ipsws/cloudOS-26.4-23E5207q.ipsw \
   --gpu-driver-bundle drivers/AppleParavirtGPUMetalIOGPUFamily.bundle
 $VC fw patch -l vms myphone
 ```
 
-- `-i` and `-c` also take URLs; downloads are cached in `~/.vphone/ipsws` (`--ipsw-cache`).
-- **The GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key server
-  answers 403 for the 23E5207q key, so get it from a stock cloudOS restore instead, as vphone-cli
-  does on a Mac. With the usbmuxd and USB/IP attacher from step 5 running:
+`fw prepare` merges both IPSWs into a restore tree inside the VM (`vms/myphone/*_Restore`, about
+12 GB); `fw patch` patches its boot chain. After that the IPSWs are only needed to make another VM,
+so you can move or delete them. (`-i` and `-c` also take the URLs directly; vphone-cli then
+downloads into `~/.vphone/ipsws`. Step 4.3 needs the cloudOS file on disk, so the explicit download
+is simpler.)
 
-  ```sh
-  tools/gpu-driver-from-cloudos.sh <cloudOS 26.4 23E5207q IPSW> drivers/
-  # -> drivers/AppleParavirtGPUMetalIOGPUFamily.bundle, for --gpu-driver-bundle above
-  ```
-
-  It restores the stock cloudOS into a temporary VM (OpenAVB, about 20 minutes), reads the driver
-  from its System volume with 7-Zip (no root, no mount), and deletes the VM. Needs about 5 GB free
-  while it runs. On the test PC it gave the same driver as vphone-cli on a Mac (SHA-1 `b5d95b38…`).
 - **Run `fw patch` every time after `fw prepare`.** `fw prepare` writes stock firmware; on the test
   host a re-prepared tree went unpatched and nothing booted past iBoot. `restore` later prints
   "recorded N boot-chain patches", but that number comes from the patch plan, not from the files.
@@ -176,12 +218,7 @@ guest (OpenAVB DFU → iBSS/iBEC → RestoreOS)
        └─ usbip attach (vhci_hcd) ──▶ usbmuxd (32 KiB) ──▶ vphone-cli restore
 ```
 
-1. As root, in two terminals, once per session:
-
-   ```sh
-   sudo tools/usbmuxd-32k.sh          # stops and runtime-masks the system usbmuxd, runs the 32 KiB one
-   sudo tools/usbip-autoattach.sh     # re-attaches the device at each stage (DFU, iBEC, RestoreOS)
-   ```
+1. Keep the two USB helpers from step 4.2 running.
 
 2. Start the VM in DFU (add `GFX=1 WINDOW=1` to watch it in a window):
 

@@ -52,7 +52,7 @@ SAVED=("$M" "$T/$RD" "$T/$TC" "$T/$TXM")
 case $MODE in
 ssh)
     for f in "$SSHRD" "$STOCK_RTSC" "$SSHROOT/usr/local/bin/dropbear"; do
-        [ -e "$f" ] || { echo "missing $f" >&2; exit 1; }
+        [ -e "$f" ] || { echo "missing $f: build the SSH ramdisk first (tools/ssh-ramdisk-stage.sh, then tools/ssh-ramdisk-rebuild-signed.sh $LIB $VM)" >&2; exit 1; }
     done
     for f in "${SAVED[@]}"; do
         [ -e "$f.full-restore" ] || cp --reflink=auto -p "$f" "$f.full-restore"

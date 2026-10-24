@@ -26,10 +26,14 @@ MOD=$ROOT/.build/linux-apfs-rw/apfs.ko
 [ "$(id -u)" = 0 ] || { echo "run as root: sudo $0" >&2; exit 1; }
 [ -f "$BASE" ] || { echo "missing base APFS image: $BASE" >&2; exit 1; }
 [ -d "$STAGE" ] || { echo "missing SSH staging dir: $STAGE" >&2; exit 1; }
-[ -f "$MOD" ] || { echo "missing APFS module: $MOD" >&2; exit 1; }
-
+# The APFS driver: already loaded, installed (modprobe), $VPHONE_APFS_KO, or the build in this
+# checkout (docs/SETUP.md step 3), in that order, as cfw install does.
 if ! grep -qw apfs /proc/filesystems; then
-    insmod "$MOD"
+    modprobe apfs 2>/dev/null || {
+        MOD=${VPHONE_APFS_KO:-$MOD}
+        [ -f "$MOD" ] || { echo "the APFS driver is not loaded and $MOD is missing: build it (docs/SETUP.md step 3)" >&2; exit 1; }
+        insmod "$MOD"
+    }
 fi
 
 mkdir -p "$MNT"

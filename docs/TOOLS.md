@@ -97,6 +97,7 @@ Used by [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). The ones marked "root" need su
 
 | Tool | Usage | What it does |
 |---|---|---|
+| `gpu-driver-from-cloudos.sh` | `tools/gpu-driver-from-cloudos.sh CLOUDOS.ipsw OUT-DIR` | Gets the GPU driver for `fw prepare --gpu-driver-bundle`: restores the stock cloudOS into a temporary VM over USB/IP, reads `AppleParavirtGPUMetalIOGPUFamily.bundle` from its System volume with 7-Zip, deletes the VM. |
 | `new-vm.sh` | `tools/new-vm.sh VM-DIR [ECID]` | Makes an empty VM bundle for a Linux restore: `config.plist` (OpenAVB/OpenSEP, a machine identifier with a random or given ECID), `ecid`, `udid-prediction.txt`, the ROMs and empty sparse disk, NVRAM and SEP storage. |
 | `dfu-up.sh` | `tools/dfu-up.sh VM-DIR RUN-DIR` | Starts the VM with QEMU (`qemu/build`, or `QEMU=`) and `vusb-usbip.py`: in DFU when `nvram.bin` holds no firmware, at iBoot's recovery prompt when it does and `auto-boot=false`. Stops any older exporter first. `GFX=1 WINDOW=1` opens the display window. Logs to `RUN-DIR`; refuses a disk another QEMU holds. |
 | `restore-tree-mode.sh` | `tools/restore-tree-mode.sh LIB VM ssh\|full` | Switches the restore tree between a full restore and the SSH ramdisk: ramdisk, trust cache, TXM pre-check patch, research restore kernel, and manifest digests over the retyped images. `full` puts the saved files back. No root. |
@@ -104,9 +105,10 @@ Used by [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). The ones marked "root" need su
 | `build-usbmuxd-32k.sh` | `tools/build-usbmuxd-32k.sh` | Builds stock usbmuxd with a 32 KiB USB MTU into `.build/usbmuxd-32k/` (no autotools needed). |
 | `usbmuxd-32k.sh` | `sudo tools/usbmuxd-32k.sh` | Root. Stops and runtime-masks the system usbmuxd and runs the 32 KiB one (pidfile `/run/usbmuxd-32k.pid`). |
 | `usbip-autoattach.sh` | `sudo tools/usbip-autoattach.sh` | Root. Attaches whatever the local exporter offers whenever nothing is attached, so each restore stage is picked up. Ctrl-C to stop. |
+| `ssh-ramdisk-stage.sh` | `tools/ssh-ramdisk-stage.sh [OUT]` | Downloads SSHRD_Script's `ssh.tar.gz` (pinned commit, SHA-256 checked) and unpacks it as the SSH ramdisk's staging tree, `runs/sshramdisk/ssh-root`, minus the files the ramdisk does not need. No root. |
 | `ssh-ramdisk-inject.sh` | `sudo tools/ssh-ramdisk-inject.sh` | Root. Adds the SSH tools (dropbear and friends) to the extracted cloudOS restore ramdisk. |
 | `ssh-ramdisk-repack.sh` | `tools/ssh-ramdisk-repack.sh [STOCK.dmg] [PAYLOAD] [OUT.dmg]` | Puts the modified APFS payload back into the stock `rdsk` IM4P wrapper. |
-| `ssh-ramdisk-rebuild-signed.sh` | `tools/ssh-ramdisk-rebuild-signed.sh LIB VM` | Rebuilds the ramdisk after the tools are re-signed with `vphone-cli sign --apple-adhoc --merge` (asks for sudo once). |
+| `ssh-ramdisk-rebuild-signed.sh` | `tools/ssh-ramdisk-rebuild-signed.sh LIB VM` | Builds the SSH ramdisk: the VM's stock restore ramdisk with the staging tree injected (`ssh-ramdisk-inject.sh`, root, once) and repacked (`ssh-ramdisk-repack.sh`), into `runs/sshramdisk/out/`. |
 | `ssh-ramdisk-trustcache.py` | `tools/ssh-ramdisk-trustcache.py STOCK.rtsc SSH-TREE OUT.rtsc` | Builds the ramdisk's trust cache: the stock entries plus the cdhash of every Mach-O in the SSH tree, sorted. |
 | `ssh-ramdisk.sh` | `tools/ssh-ramdisk.sh 'CMD'` | Runs a command on the booted SSH ramdisk as root, through usbmuxd. |
 | `usbmux-connect.py` | `tools/usbmux-connect.py proxy PORT` | A small iproxy: connects stdin/stdout to a device port through usbmuxd (the ssh ProxyCommand). |

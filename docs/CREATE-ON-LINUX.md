@@ -136,17 +136,23 @@ The tested pairing: iPhone17,3 **26.6.2 (23G90)** with cloudOS **26.4 (23E5207q)
 ```sh
 $VC fw prepare -l vms myphone \
   -i iPhone17,3_26.6.2_23G90_Restore.ipsw -c <cloudOS 26.4 23E5207q IPSW> \
-  --gpu-driver-bundle <dir>/AppleParavirtGPUMetalIOGPUFamily.bundle
+  --gpu-driver-bundle drivers/AppleParavirtGPUMetalIOGPUFamily.bundle
 $VC fw patch -l vms myphone
 ```
 
 - `-i` and `-c` also take URLs; downloads are cached in `~/.vphone/ipsws` (`--ipsw-cache`).
-- **The GPU driver.** Its cryptex is AEA-encrypted, and Apple's key server answers 403 for the
-  23E5207q keys, so pass the driver from a stock cloudOS restore instead. To get it on Linux, restore
-  the stock cloudOS IPSW into a scratch bundle (same steps as step 5), then extract
-  `System/Library/Extensions/AppleParavirtGPUMetalIOGPUFamily.bundle` from its System volume with
-  7-Zip, which reads a stock restored disk without root. TODO (release): give the exact 7-Zip
-  commands.
+- **The GPU driver.** It ships in the cloudOS IPSW's AEA-encrypted cryptex, and Apple's key server
+  answers 403 for the 23E5207q key, so get it from a stock cloudOS restore instead, as vphone-cli
+  does on a Mac. With the usbmuxd and USB/IP attacher from step 5 running:
+
+  ```sh
+  tools/gpu-driver-from-cloudos.sh <cloudOS 26.4 23E5207q IPSW> drivers/
+  # -> drivers/AppleParavirtGPUMetalIOGPUFamily.bundle, for --gpu-driver-bundle above
+  ```
+
+  It restores the stock cloudOS into a temporary VM (OpenAVB, about 20 minutes), reads the driver
+  from its System volume with 7-Zip (no root, no mount), and deletes the VM. Needs about 5 GB free
+  while it runs. On the test PC it gave the same driver as vphone-cli on a Mac (SHA-1 `b5d95b38…`).
 - **Run `fw patch` every time after `fw prepare`.** `fw prepare` writes stock firmware; on the test
   host a re-prepared tree went unpatched and nothing booted past iBoot. `restore` later prints
   "recorded N boot-chain patches", but that number comes from the patch plan, not from the files.
@@ -200,17 +206,22 @@ Linux cannot write the guest's System volume: it is sealed, and linux-apfs-rw re
 mounts of sealed volumes. So the guest's own kernel mounts its volumes from an SSH ramdisk (dropbear,
 `root`/`alpine`), and the CFW install reaches them over sshfs.
 
-**Build the SSH ramdisk image** once per firmware (root, for the APFS mount):
+**Build the SSH ramdisk image** once per firmware, while the restore tree is still in full mode
+(right after step 5):
 
 ```sh
-bash tools/ssh-ramdisk-rebuild-signed.sh vms myphone   # -> runs/sshramdisk/out/094-39914-031.dmg
+tools/ssh-ramdisk-stage.sh                              # -> runs/sshramdisk/ssh-root
+bash tools/ssh-ramdisk-rebuild-signed.sh vms myphone    # -> runs/sshramdisk/out/094-39914-031.dmg (asks for sudo once)
 ```
 
-Run it while the restore tree is in full mode (right after step 5): it saves the tree's stock restore
-ramdisk to `runs/sshramdisk/` the first time. It injects the SSH tools from `runs/sshramdisk/ssh-root`
-(re-signed with `vphone-cli sign --apple-adhoc --merge`) into that ramdisk.
-TODO: document where the SSH tools come from (SSHRD_Script's `ssh.tar.gz`) and how the staging tree
-is made.
+- `ssh-ramdisk-stage.sh` downloads the SSH tools (dropbear, bash, coreutils, sftp-server for iOS)
+  from SSHRD_Script's [sshtars](https://github.com/verygenericname/sshtars) at a pinned commit,
+  checks their SHA-256, and unpacks them. This repository doesn't redistribute them. They are not
+  re-signed: the trust cache built in the next step admits them as they ship.
+- `ssh-ramdisk-rebuild-signed.sh` saves the tree's stock restore ramdisk to `runs/sshramdisk/` the
+  first time, mounts a copy of its APFS volume (root, linux-apfs-rw), adds the tools, and repacks it.
+- The tested ramdisk also carried a PRNG seeder (`prng_seedctl`), which exited without effect; the
+  script leaves it out.
 
 **Switch the restore tree to the SSH ramdisk:**
 

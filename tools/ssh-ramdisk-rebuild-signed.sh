@@ -1,9 +1,7 @@
 #!/bin/bash
-# Rebuild the SSH ramdisk from the (re-signed) SSH staging tree.
-#
-# The staging tree's Mach-Os were re-signed with
-#   vphone-cli sign --apple-adhoc --merge
-# so TXM selector 24 takes its ad-hoc branch instead of the CMS gate.
+# Build the SSH ramdisk: the stock cloudOS restore ramdisk with the SSH tools from the staging tree
+# (tools/ssh-ramdisk-stage.sh) injected. The tools are not re-signed; tools/restore-tree-mode.sh adds
+# their code hashes to the trust cache and forces TXM's selector-24 check to pass.
 #
 # Usage (as your normal user; it asks for sudo once, for the APFS mount):
 #   bash tools/ssh-ramdisk-rebuild-signed.sh <library> <vm>
@@ -35,7 +33,7 @@ if [ ! -f "$BASE" ]; then
 fi
 
 for f in "$STOCK" "$BASE" "$STAGE/usr/local/bin/dropbear"; do
-    [ -e "$f" ] || { echo "missing $f" >&2; exit 1; }
+    [ -e "$f" ] || { echo "missing $f (staging tree: tools/ssh-ramdisk-stage.sh)" >&2; exit 1; }
 done
 
 echo "=== fresh APFS copy (stock base is left untouched)"
@@ -43,7 +41,7 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 cp "$BASE" "$PAYLOAD"
 
-echo "=== inject signed staging tree (needs sudo for losetup/mount)"
+echo "=== inject the staging tree (needs sudo for losetup/mount)"
 sudo "$ROOT/tools/ssh-ramdisk-inject.sh" "$PAYLOAD" "$STAGE" "$MNT"
 
 echo "=== repack into the stock rdsk IM4P wrapper"

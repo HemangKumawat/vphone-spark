@@ -52,8 +52,8 @@ args=(
   # root APFS disk to be present as an Apple VirtIO PCI storage device.
   -drive "file=$VM/Disk.img,if=none,id=root-pci,format=raw,file.locking=off"
   # Virtualization.framework also exposes the auxiliary storage as an "aux"
-  # virtio-blk device; the RestoreOS builds its IONVRAM service from it (QEMU branch
-  # vusb-restore). Like the pflash, it starts past the 16 KiB aux-storage header: without the
+  # virtio-blk device; the RestoreOS builds its IONVRAM service from it.
+  # Like the pflash, it starts past the 16 KiB aux-storage header: without the
   # offset the restore writes the firmware store at byte 0 and the ROM falls back to DFU.
   -drive "file=$VM/nvram.bin,if=none,id=aux-pci,format=raw,offset=16384,file.locking=off"
   -serial mon:stdio

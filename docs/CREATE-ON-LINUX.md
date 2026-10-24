@@ -16,7 +16,7 @@ cover what went wrong on the test PC.
 The steps:
 
 1. [Extra dependencies](#1-extra-dependencies)
-2. [Build vphone-cli for Linux, the restore QEMU and usbmuxd](#2-build-vphone-cli-for-linux-the-restore-qemu-and-usbmuxd)
+2. [Build vphone-cli for Linux and usbmuxd](#2-build-vphone-cli-for-linux-and-usbmuxd)
 3. [Make an empty VM bundle](#3-make-an-empty-vm-bundle)
 4. [Download and patch the firmware](#4-download-and-patch-the-firmware)
 5. [Restore over USB/IP](#5-restore-over-usbip)
@@ -57,7 +57,7 @@ sudo dnf install usbip fuse-sshfs fuse3 7zip kernel-devel \
 
 TODO (release): check this list on a clean install.
 
-## 2. Build vphone-cli for Linux, the restore QEMU and usbmuxd
+## 2. Build vphone-cli for Linux and usbmuxd
 
 **vphone-cli.** `linux-create/` builds vphone-cli **2.12.1**'s firmware tooling (`fw`, `restore`,
 `cfw`, `sign`, ...) for Linux without changing vphone-cli's files: `sync-sources.sh` links them from
@@ -90,20 +90,10 @@ cp $R/OpenAVB/OpenAVB.bin OpenAVB/ && cp $R/OpenSEP/OpenSEP.bin OpenSEP/
 
 The release and the vphone-cli checkout must be the same version.
 
-**The restore QEMU.** The restore needs QEMU's virtual USB device controllers (`hw/vmapple/vusb.c`,
-which OpenAVB, iBoot and AVPBooter drive in DFU and recovery mode, and `hw/vmapple/vusb-pci.c`, the
-RestoreOS's virtio USB controller) and the auxiliary virtio-blk drive. They are on qemu-vphone's
-branch `vusb-restore`. Check it out next to the main QEMU and build it the same way
-([ADVANCED.md](ADVANCED.md#building-by-hand)); `tools/dfu-up.sh` uses `qemu-create/build` (or `QEMU=`):
-
-```sh
-git -C qemu fetch origin vusb-restore
-git -C qemu worktree add ../qemu-create FETCH_HEAD
-mkdir -p qemu-create/build && cd qemu-create/build && ../configure <same options> && cd ../..
-ninja -C qemu-create/build qemu-system-aarch64
-```
-
-TODO (release): merge `vusb-restore` into `vphone` so one QEMU build does both.
+**QEMU** is the one `./build.sh` builds: its `vphone` branch also has the virtual USB device
+controllers a restore needs (`hw/vmapple/vusb.c`, which OpenAVB, iBoot and AVPBooter drive in DFU
+and recovery mode, and `hw/vmapple/vusb-pci.c`, the RestoreOS's virtio USB controller) and the
+auxiliary virtio-blk drive.
 
 **The 32 KiB usbmuxd.** The RestoreOS's `AppleUSBDeviceMux` reads 32 KiB buffers and drops a USB
 transfer that does not hold exactly one mux packet. Stock usbmuxd sends 48 KiB packets, which reset

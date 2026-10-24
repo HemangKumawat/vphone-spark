@@ -199,7 +199,7 @@ that OpenAVB, AVPBooter and iBoot use in DFU and recovery mode. Each request is 
 guest RAM; on completion the device sets register `0x10` (which AVPBooter and iBoot poll) and also
 writes the first descriptor back (`flags = 0x8000`, and the received length), which is what OpenAVB
 polls; `hw/vmapple/vusb-pci.c` is the RestoreOS's virtio
-USB device controller (QEMU branch `vusb-restore`). Both go to a chardev. `tools/vusb-usbip.py` turns
+USB device controller. Both go to a chardev. `tools/vusb-usbip.py` turns
 that into a USB/IP server on 127.0.0.1, the host attaches it with `usbip` (vhci_hcd), and usbmuxd and
 vphone-cli's idevicerestore see an ordinary USB iPhone: 05ac:1227 (DFU), then 05ac:12a8/12ac (the
 RestoreOS and the SSH ramdisk). Each stage re-enumerates, so `tools/usbip-autoattach.sh` re-attaches.

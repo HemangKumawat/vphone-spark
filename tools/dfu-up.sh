@@ -9,7 +9,7 @@
 # `vphone-cli restore`. Logs go to <run-dir> (serial.log, stderr.log, qemu.log, usbip.log).
 # Only the QEMU and exporter that a previous dfu-up.sh started for <run-dir> are stopped first.
 #
-# Env: QEMU (default: qemu-create/build, the build with the RestoreOS's USB device controller),
+# Env: QEMU (default: qemu/build),
 #      GFX=1 WINDOW=1 (open the display window to watch), SMP (8), VUSB_DEBUG=1 (log every URB), VUSB_URB_TIMEOUT (seconds, default 300).
 set -euo pipefail
 VM=$(realpath "${1:?usage: dfu-up.sh <vm-dir> <run-dir>}")
@@ -33,7 +33,7 @@ for p in $(pgrep -x qemu-system-aar || true); do
   fi
 done
 rm -f "$SOCK"
-(QEMU=${QEMU:-$PWD/qemu-create/build/qemu-system-aarch64} CID=0 SMP=${SMP:-8} \
+(QEMU=${QEMU:-$PWD/qemu/build/qemu-system-aarch64} CID=0 SMP=${SMP:-8} \
   GFX=${GFX:-0} WINDOW=${WINDOW:-0} \
   DFLAGS=guest_errors LOG=$R/qemu.log timeout 14400 \
   ./run-vphone.sh "$VM" -chardev socket,id=vusb,path=$SOCK,server=on,wait=off \

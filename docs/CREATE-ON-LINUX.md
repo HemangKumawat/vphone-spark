@@ -172,8 +172,14 @@ guest (OpenAVB DFU → iBSS/iBEC → RestoreOS)
    failed at 12% (`format_media`) with 17 GB free and passed with 27 GB.
 
    A good run logs `Describing iBSS to OpenAVB`, ends with `Status: Restore Finished`, and leaves a
-   firmware store in `nvram.bin` (`HUFA` at 0x4000, iLLB, `auto-boot=true`). Stop the VM afterwards.
+   firmware store in `nvram.bin` (`HUFA` at 0x4000, iLLB, `auto-boot=true`).
    `VPHONE_RESTORE_TIMEOUT_SCALE` stretches idevicerestore's device waits for emulation.
+
+4. Stop the VM (the next step starts it again in a different mode):
+
+   ```sh
+   tools/dfu-stop.sh vms/myphone
+   ```
 
 On the test host one restore attempt failed early (the NVRAM recorded
 `restore-outcome=initial_engine_failure_no_return`) and the next one, unchanged, passed. If a
@@ -265,6 +271,7 @@ and unmount them with `fusermount3 -u` before retrying.
 
    ```sh
    tools/ssh-ramdisk.sh 'sync; /sbin/umount /mnt2; /sbin/umount /mnt6; /sbin/umount /mnt1; sync'
+   tools/dfu-stop.sh vms/myphone
    ```
 
    xART at `/mnt7` stays busy; `sync` is enough for it.

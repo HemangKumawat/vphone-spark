@@ -97,6 +97,7 @@ Used by [CREATE-ON-LINUX.md](CREATE-ON-LINUX.md). The ones marked "root" need su
 
 | Tool | Usage | What it does |
 |---|---|---|
+| `new-vm.sh` | `tools/new-vm.sh VM-DIR [ECID]` | Makes an empty VM bundle for a Linux restore: `config.plist` (OpenAVB/OpenSEP, a machine identifier with a random or given ECID), `ecid`, `udid-prediction.txt`, the ROMs and empty sparse disk, NVRAM and SEP storage. |
 | `dfu-up.sh` | `tools/dfu-up.sh VM-DIR RUN-DIR` | Starts the VM with QEMU (`qemu/build`, or `QEMU=`) and `vusb-usbip.py`: in DFU when `nvram.bin` holds no firmware, at iBoot's recovery prompt when it does and `auto-boot=false`. Stops any older exporter first. `GFX=1 WINDOW=1` opens the display window. Logs to `RUN-DIR`; refuses a disk another QEMU holds. |
 | `restore-tree-mode.sh` | `tools/restore-tree-mode.sh LIB VM ssh\|full` | Switches the restore tree between a full restore and the SSH ramdisk: ramdisk, trust cache, TXM pre-check patch, research restore kernel, and manifest digests over the retyped images. `full` puts the saved files back. No root. |
 | `nvram-autoboot.py` | `tools/nvram-autoboot.py NVRAM [--auto-boot true\|false] [--dry-run]` | Edits the guest's NVRAM banks in `nvram.bin` (stopped VM): sets `auto-boot` and drops the restore's `boot-args`. `false` makes iBoot stop at recovery for the SSH ramdisk; `true` boots the installed system. |

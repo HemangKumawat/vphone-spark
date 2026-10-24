@@ -105,18 +105,23 @@ tools/build-usbmuxd-32k.sh        # -> .build/usbmuxd-32k/usbmuxd
 
 ## 3. Make an empty VM bundle
 
-There is no `vm create` on Linux yet, so the bundle is made by hand:
+```sh
+tools/new-vm.sh vms/myphone          # a random ECID; or: tools/new-vm.sh vms/myphone <ECID in hex>
+```
+
+It writes what vphone-cli's `vm new` would, with the ROMs from step 2:
 
 | File | Contents |
 |---|---|
-| `OpenAVB.bin`, `OpenSEP.bin` | Copies of the ROMs from 5.2. |
-| `config.plist` | vphone-cli's machine configuration: `schemaVersion` 2, `platformType` `vresearch101`, `cpuCount` 8, `memorySize` 8 GiB, the 1290x2796 `screenConfig`, `romImages` = `{avpBooter: OpenAVB.bin, avpSEPBooter: OpenSEP.bin}`, and a `machineIdentifier` holding the ECID. `run-vphone.sh` boots the ROMs `romImages` names. |
-| `ecid` | The ECID in hex, the same one as in `config.plist`. |
-| `Disk.img` | Empty and sparse: `truncate -s 64G Disk.img`. |
-| `nvram.bin` | Zeros, 32 MiB + 16 KiB: `truncate -s 33570816 nvram.bin`. |
-| `SEPStorage` | Zeros, 512 KiB: `truncate -s 512K SEPStorage`. |
+| `OpenAVB.bin`, `OpenSEP.bin` | Copies of the ROMs. |
+| `config.plist` | vphone-cli's machine configuration: `vresearch101`, 8 CPUs, 8 GiB (`CPUS=`, `MEM_GIB=`), the 1290x2796 screen, `romImages` naming the two ROMs (`run-vphone.sh` boots those), NAT with a random MAC, and a `machineIdentifier` holding the ECID (Virtualization.framework's format: a binary plist `{ECID: …}`). |
+| `ecid`, `udid-prediction.txt` | The ECID, for `run-vphone.sh` and for `restore` (so it needs no `--ecid`). |
+| `Disk.img` | Empty, sparse, 64 GiB. |
+| `nvram.bin` | Zeros, 32 MiB + 16 KiB. |
+| `SEPStorage` | Zeros, 512 KiB. |
 
-TODO (release): ship a script that writes `config.plist` and `ecid` with a fresh ECID.
+The name must not start with a dot (vphone-cli refuses it). Apple's signing server accepted a
+random ECID from this script in testing (`restore --get-shsh`).
 
 With an empty `nvram.bin`, OpenAVB finds no firmware to boot and drops into DFU mode
 (`OpenBootROM: virtual firmware source not found`), which is where a restore starts.
@@ -177,7 +182,7 @@ guest (OpenAVB DFU → iBSS/iBEC → RestoreOS)
 3. Restore (this **erases** `Disk.img`; about 25 minutes on the test host):
 
    ```sh
-   VPHONE_RESTORE_TIMEOUT_SCALE=10 $VC restore -l vms myphone --ecid 0x<ecid> -v
+   VPHONE_RESTORE_TIMEOUT_SCALE=10 $VC restore -l vms myphone -v
    ```
 
    A good run logs `Describing iBSS to OpenAVB`, ends with `Status: Restore Finished`, and leaves a
@@ -224,7 +229,7 @@ prompt (`05ac:1281`); `restore --boot-ramdisk` boots the ramdisk from there:
 python3 tools/nvram-autoboot.py vms/myphone/nvram.bin --auto-boot false
 tools/dfu-up.sh vms/myphone runs/myphone-sshrd
 VPHONE_RESTORE_TIMEOUT_SCALE=10 VPHONE_RESTORE_BOOT_ARGS_EXTRA="serial=3" \
-  $VC restore -l vms myphone --ecid 0x<ecid> --boot-ramdisk -v
+  $VC restore -l vms myphone --boot-ramdisk -v
 tools/ssh-ramdisk.sh 'id'                                  # uid=0(root)
 tools/ssh-ramdisk.sh '/bin/bash /usr/bin/mount_filesystems; /sbin/mount'
 ```

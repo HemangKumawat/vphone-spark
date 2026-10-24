@@ -13,6 +13,7 @@ files listed in `excludes/`, plus:
 - `overlay/`: whole-file replacements and Linux-only files (the Linux `cfw install` path, the restore
   bridge, URLSession workarounds, `fw snapshot-flip`);
 - `edits/`: one-line sed edits, one `path<TAB>expression` per line.
+- `Vendor/Img4tool/`: libimg4-spm 0.1.1 (the version vphone-cli pins) adapted for Linux; see its README.
 
 ```sh
 VPHONE_CLI=../vphone-cli ./sync-sources.sh

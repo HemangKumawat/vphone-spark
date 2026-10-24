@@ -43,7 +43,7 @@ let package = Package(
         .target(name: "ArchiveKit", dependencies: ["libarchive"], path: "Shims/ArchiveKit",
                 linkerSettings: [.unsafeFlags(["-L", "Shims/libarchive/lib"])]),
         .target(name: "Img4OpenSSL", path: "Shims/Img4OpenSSL", linkerSettings: [.linkedLibrary("crypto")]),
-        .target(name: "Img4tool", dependencies: ["VLCryptoKit", "VLDarwin", "LinuxSys", "VLCompression", "Img4OpenSSL"], path: "Sources/Img4tool"),
+        .target(name: "Img4tool", dependencies: ["VLCryptoKit", "VLDarwin", "LinuxSys", "VLCompression", "Img4OpenSSL"], path: "Vendor/Img4tool", exclude: ["LICENSE", "README.md"]),
 
         // vphone-cli's modules (Sources/ from sync-sources.sh).
         .target(name: "VPhonePatchKit", dependencies: ["VLCryptoKit", "VLDarwin", "LinuxSys", .product(name: "Capstone", package: "libcapstone-spm")], path: "Sources/VPhonePatchKit", swiftSettings: swift6),

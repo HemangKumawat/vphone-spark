@@ -227,12 +227,24 @@ python3 tools/nvram-autoboot.py vms/myphone/nvram.bin --auto-boot false
 tools/dfu-up.sh vms/myphone runs/myphone-sshrd
 VPHONE_RESTORE_TIMEOUT_SCALE=10 VPHONE_RESTORE_BOOT_ARGS_EXTRA="serial=3" \
   $VC restore -l vms myphone --boot-ramdisk -v
+```
+
+After a few minutes the log ends like this, and **stays there**:
+
+```text
+Sending RestoreKernelCache (43374642 bytes)...
+Waiting for device to enter restore mode...
+normal_idevice_new: can't connect to lockdownd on device with UDID SSHRD_Script Sep 22 2022 18:56:50
+```
+
+That means the ramdisk is up: `SSHRD_Script` is the SSH ramdisk answering, and the lockdownd lines
+only say it is not a normal iOS system, so the command never finishes on its own. **Press Ctrl-C to
+stop it**; the ramdisk keeps running. Then, in the same shell:
+
+```sh
 tools/ssh-ramdisk.sh 'id'                                  # uid=0(root)
 tools/ssh-ramdisk.sh '/bin/bash /usr/bin/mount_filesystems; /sbin/mount'
 ```
-
-The ramdisk shows up as `05ac:12a8` after a few minutes. The command can keep waiting for lockdownd
-after that; once `ssh-ramdisk.sh` works, it can be stopped.
 
 `mount_filesystems` mounts by role. On the test VM: System `disk1s1` at `/mnt1`, Data at `/mnt2`,
 Preboot `disk1s5` at `/mnt6`, and xART `disk1s3` at `/mnt7` (it holds the gigalocker, a 6 MB

@@ -21,8 +21,8 @@ The submodules are pinned to these commits (each fork's `vphone` branch):
 | Submodule | Fork | Upstream | Fork branch | Commit |
 |---|---|---|---|---|
 | `qemu` | [YahiaAngelo/qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone) | [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon) `master` @ `cc4302a9` | `vphone` | `3ed85774c2989addec3056a866991762b60c4b5c` |
-| `reims-vgpu` | [YahiaAngelo/reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) | [steelbrain/reims-vgpu](https://github.com/steelbrain/reims-vgpu) `development` @ `56eed1eb` | `vphone` | `8ca9b8fb22c29f0e7ca66bdb8afa28f692361006` |
-| `metal2vulkan` | [YahiaAngelo/metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan) | [steelbrain/metal2vulkan](https://github.com/steelbrain/metal2vulkan) `development` @ `6b322fb5` | `vphone` | `fb0bd570ecfead540ce82b670a52c7245ccb616c` |
+| `reims-vgpu` | [YahiaAngelo/reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) | [steelbrain/reims-vgpu](https://github.com/steelbrain/reims-vgpu) `development` @ `7ad52b99` | `vphone-next` | `fc8daa1bb72986b95477babfcec1f9b07e2d9526` |
+| `metal2vulkan` | [YahiaAngelo/metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan) | [steelbrain/metal2vulkan](https://github.com/steelbrain/metal2vulkan) `development` @ `dc80eb2b` | `vphone-next` | `4d2508e1feae86174d738bbf3724a0a29651053a` |
 
 reims-vgpu's `Cargo.toml` has a `[patch]` section that takes metal2vulkan from `../metal2vulkan`, so the
 `vphone` metal2vulkan is used only when both submodules sit side by side, as they do here.

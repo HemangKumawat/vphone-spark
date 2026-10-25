@@ -47,7 +47,7 @@ seconds to open and scrolling runs at about 60 frames/s with occasional stutters
 On Fedora:
 
 ```sh
-sudo dnf install git gcc gcc-c++ clang binutils make cmake ninja-build meson python3 rsync \
+sudo dnf install git gcc gcc-c++ clang lld binutils make cmake ninja-build meson python3 rsync \
   glib2-devel pixman-devel lzfse-devel libslirp-devel libssh-devel libzstd-devel \
   nettle-devel gnutls-devel gtk3-devel sdl2-compat-devel bzip2-devel \
   libX11-devel libXScrnSaver-devel wayland-devel libxkbcommon-devel \

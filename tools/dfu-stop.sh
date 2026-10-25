@@ -8,10 +8,16 @@
 # alone.
 set -euo pipefail
 VM=$(realpath "${1:?usage: dfu-stop.sh <vm-dir>}")
+want=$(stat -L -c %d:%i "$VM/Disk.img")
 stopped=0
 for p in $(pgrep -x qemu-system-aar || true); do
   cmd=$(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null) || continue
-  case $cmd in *"$VM/Disk.img"*) ;; *) continue ;; esac
+  # Compared by inode, so a VM started through a symlinked path (vms/boot-x/vm) still matches.
+  hit=
+  for f in $(tr '\0' '\n' </proc/$p/cmdline | grep -oE 'file=[^,]*Disk\.img' | cut -d= -f2); do
+    [ "$(cd "$(readlink /proc/$p/cwd 2>/dev/null || echo /)" && stat -L -c %d:%i "$f" 2>/dev/null)" = "$want" ] && hit=1
+  done
+  [ -n "$hit" ] || continue
   sock=$(printf '%s' "$cmd" | grep -oE 'path=[^, ]*vusb\.sock' | head -1 | cut -d= -f2 || true)
   kill "$p" && echo "stopped QEMU $p"
   for _ in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.5; done

@@ -21,9 +21,15 @@ cd "$(dirname "$0")/.."
 SOCK=$R/vusb.sock
 # Never two guests on one disk (the drives are opened without locking). Checked first, before
 # anything is stopped: a VM from another run on this disk is refused; this run's own is restarted.
+want=$(stat -L -c %d:%i "$VM/Disk.img")
 for p in $(pgrep -x qemu-system-aar || true); do
   cmd=$(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null) || continue
-  case $cmd in *"$VM/Disk.img"*) ;; *) continue ;; esac
+  # By inode: a VM started with a relative or symlinked path to this disk still counts.
+  hit=
+  for f in $(tr '\0' '\n' </proc/$p/cmdline | grep -oE 'file=[^,]*Disk\.img' | cut -d= -f2); do
+    [ "$(cd "$(readlink /proc/$p/cwd 2>/dev/null || echo /)" && stat -L -c %d:%i "$f" 2>/dev/null)" = "$want" ] && hit=1
+  done
+  [ -n "$hit" ] || continue
   case $cmd in *"$SOCK"*) continue ;; esac
   echo "a VM is already running $VM (QEMU pid $p); stop it first: tools/dfu-stop.sh $VM" >&2; exit 2
 done

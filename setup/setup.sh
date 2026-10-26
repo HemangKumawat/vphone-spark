@@ -167,20 +167,24 @@ done
 # ------------------------------------------------------------- 4. release ---
 do_phase release && {
   rel="$VSETUP_RELEASE/app"
+  log " Setting up the vphone-cli $VPHONE_CLI_PUBLIC release bundle (ROMs + guest resources)"
+  zip="$VSETUP_RELEASE/VPhone-$VPHONE_CLI_PUBLIC.zip"
   if [ ! -d "$rel/VPhone.bundle/Contents/Resources/OpenAVB" ]; then
-    log " Fetching the vphone-cli $VPHONE_CLI_PUBLIC release bundle (ROMs + guest resources)"
-    zip="$VSETUP_RELEASE/VPhone-$VPHONE_CLI_PUBLIC.zip"
-    mkdir -p "$rel"
-    curl -L --retry 3 -o "$zip" \
+    [ -f "$zip" ] || curl -L --retry 3 -o "$zip" \
       "https://github.com/Lakr233/vphone-cli/releases/download/$VPHONE_CLI_PUBLIC/VPhone-$VPHONE_CLI_PUBLIC.zip"
-    unzip -q "$zip" -d "$rel"
-    # Release zips have carried both layouts: app/VPhone.bundle (2.12) and
-    # VPhone.bundle at the root (2.13+). Normalize to app/VPhone.bundle.
-    [ -d "$rel/VPhone.bundle" ] && [ ! -d "$rel/app" ] && {
-      mkdir -p "$rel/app" && mv "$rel/VPhone.bundle" "$rel/app/"
-    }
+    [ -d "$rel/VPhone.bundle" ] || unzip -q -n "$zip" -d "$rel"
+    # The bundle can land at any nesting depth (2.12: app/VPhone.bundle;
+    # 2.13's zip itself starts with an app/ folder: app/app/VPhone.bundle).
+    # Find it wherever it is and normalize to $rel/VPhone.bundle.
+    bundle=$(find "$rel" -type d -name VPhone.bundle -print -quit)
+    if [ -n "$bundle" ] && [ "$bundle" != "$rel/VPhone.bundle" ]; then
+      log " Normalizing bundle path: $bundle -> $rel/VPhone.bundle"
+      rm -rf "$rel/VPhone.bundle" 2>/dev/null
+      mv "$bundle" "$rel/VPhone.bundle"
+    fi
   fi
-  log " Setting up OpenAVB/OpenSEP ROMs and guest-resources symlinks"
+  [ -d "$rel/VPhone.bundle/Contents/Resources/OpenAVB" ] ||
+    die "VPhone.bundle not found, or missing ROMs in $rel — check the download and re-run './setup.sh release'"
   r="$rel/VPhone.bundle/Contents/Resources"
   ( cd "$VSETUP_SRC"
     ln -sfn "$r/guest-resources" guest-resources

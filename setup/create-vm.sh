@@ -8,7 +8,7 @@
 #
 # The pipeline is vphone-cli's Linux firmware flow (docs/SETUP.md §5) with one
 # state file per VM, so a re-run resumes after an interrupted step. QEMU is
-# only ever STARTED here (the last step, once); this script has no kill logic.
+# only ever STARTED here (the last step, once); this script never stops a VM.
 set -Eeuo pipefail
 # shellcheck disable=SC1091  # this checkout's own lib/common.sh, resolved at run time
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"

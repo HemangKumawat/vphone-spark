@@ -122,13 +122,6 @@ jobs:
             echo '      from the CDN at run time, never committed.'
             exit 1
           fi
-          if [ "$bad" = 0 ]; then
-            echo 'ok: no Apple software or large blobs tracked'
-          else
-            echo 'FAIL: remove the files above — Apple code/firmware is downloaded'
-            echo '      from the CDN at run time, never committed.'
-            exit 1
-          fi
 
   compat-sync:
     name: report upstream pairing drift

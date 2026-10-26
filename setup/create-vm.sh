@@ -81,7 +81,7 @@ PAIR_JSON=$(python3 "$J" find "$DEVICE" "$IOS") ||
 DEVICE_NAME=$(python3 "$J" devname "$DEVICE")
 IFS=$'\t' read -r PAIR_IPSW PAIR_CLOUDOS PAIR_PRESET PAIR_BUILD PAIR_LINUX \
   PAIR_MAC PAIR_MACBUILDER PAIR_NOTE <<< "$PAIR_JSON"
-_=$PAIR_MAC   # recorded; the macOS-tested flag shows in the menus
+export PAIR_IPSW PAIR_MAC   # both flags render in the menus
 
 if [ "$PAIR_MACBUILDER" = 1 ]; then
   die "$DEVICE $IOS (cloudOS $PAIR_CLOUDOS) is kernel-first iOS 18: the kernelcache mix
@@ -151,6 +151,11 @@ step firmware && {
   [ "$DRY" = 1 ] || mkdir -p "$cache"
   if [ -n "$WANT_IOS" ]; then
     IOS_URL=$WANT_IOS IOS_FILE=${IPSW_PATH:-$(basename "$WANT_IOS")}
+  elif [ ! -x "$VC" ]; then
+    # ./setup.sh has not built vphone-cli yet, so the fw catalog is not
+    # available. Skip cleanly; IPSW_URL=/CLOUDOS_URL= can still fetch.
+    log "  (vphone-cli not built: firmware resolution skipped)"
+    IOS_FILE=$PAIR_IPSW IOS_URL='' CLOUD_FILE='' CLOUDOS_LOCAL=''
   else
     resolved=$(python3 "$VSETUP_ROOT/lib/get-firmware.py" "$VC" "$DEVICE" \
                "$IOS" "$PAIR_CLOUDOS") ||
@@ -161,7 +166,9 @@ step firmware && {
     [ -s "$cache/$CLOUD_FILE" ] || dry curl -L --retry 3 -o "$cache/$CLOUD_FILE" "$CLOUD_URL"
   fi
   IOS_LOCAL=$cache/$IOS_FILE
-  [ -s "$IOS_LOCAL" ] || dry curl -L --retry 3 -o "$IOS_LOCAL" "$IOS_URL"
+  if [ -n "${IOS_URL:-}" ]; then
+    [ -s "$IOS_LOCAL" ] || dry curl -L --retry 3 -o "$IOS_LOCAL" "$IOS_URL"
+  fi
   # cloudOS for `-c` — the resolver's file (or the caller's URL)
   CLOUDOS_LOCAL=${CLOUD_FILE:+$cache/$CLOUD_FILE}
   log "  firmware: $IOS_FILE + $CLOUD_FILE (or the given URLs) under $cache"

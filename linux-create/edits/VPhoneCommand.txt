@@ -3,7 +3,7 @@ Firmware/VPhoneCustomFirmwareInstaller.swift	s/resourceValues\(forKeys: \[\.volu
 Firmware/VPhoneCustomFirmwareInstaller.swift	s/\.volumeAvailableCapacityForImportantUsage \?\? 0/.volumeAvailableCapacity.map(Int64.init) ?? 0/
 # fw aea-decrypt (overlay Firmware/VPhoneFirmwareAEADecryptCommand.swift): aea decrypt on Linux.
 Firmware/VPhoneFirmwareCommand.swift	s/^( *)VPhoneFirmwareAEAKeyCommand\.self,$/\1VPhoneFirmwareAEAKeyCommand.self,\n\1VPhoneFirmwareAEADecryptCommand.self,/
-Firmware/VPhoneCustomFirmwareInstaller.swift	s/50 \* 1024 \* 1024 \* 1024/20 * 1024 * 1024 * 1024/
+Firmware/VPhoneFirmwareCommand.swift	s#/private/var/tmp#/var/tmp#
 Firmware/VPhoneCustomFirmwareInstaller.swift	s#/private/var/tmp#/var/tmp#
 Firmware/VPhoneCustomFirmwareInstaller.swift	s#/usr/sbin/lsof#/usr/bin/lsof#g
 Firmware/VPhoneCustomFirmwareInstaller.swift	s#/sbin/umount#/usr/bin/umount#g

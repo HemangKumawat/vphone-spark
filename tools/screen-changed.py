@@ -2,7 +2,7 @@
 """screen-changed.py SOCK BEFORE.ppm: take a PPM screendump and exit 0 if it differs clearly from
 BEFORE (an earlier screendump), else 1. Without BEFORE: just save SOCK's screen to stdout path
 given as the only other argument? No: usage `screen-changed.py SOCK save PATH` saves one."""
-import json, os, socket, sys
+import json, socket, sys
 from PIL import Image, ImageChops
 
 def shot(sock, path):
@@ -16,6 +16,6 @@ sock = sys.argv[1]
 if sys.argv[2] == "save":
     shot(sock, sys.argv[3]); sys.exit(0)
 before = Image.open(sys.argv[2]).convert("L").resize((86, 186))
-now = shot(sock, os.path.join(os.environ.get("TMPDIR", "/tmp"), "screen-now.ppm"))
+now = shot(sock, "/tmp/claude-1000/screen-now.ppm")
 d = sum(ImageChops.difference(before, now).histogram()[30:])
 sys.exit(0 if d > 3000 else 1)

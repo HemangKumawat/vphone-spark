@@ -1,5 +1,5 @@
 {
-  "originHash" : "766f476ad93051d40c2b80d977134d216804db563f45d2a0c24da257645c9899",
+  "originHash" : "e6eea0c3cc83cc41e46512a84afeb747b5ced969feaf3a40738f52f625bbdafe",
   "pins" : [
     {
       "identity" : "libcapstone-spm",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/p-x9/MachOKit.git",
       "state" : {
-        "revision" : "773e10797abc53914b94c2ee8c6f40f5da0b06eb",
-        "version" : "0.52.2"
+        "revision" : "f0c6565435659aeb23369810874578d5344d13b7",
+        "version" : "0.55.0"
       }
     },
     {

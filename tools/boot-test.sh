@@ -4,8 +4,8 @@
 #   tools/boot-test.sh RUN CID [extra QEMU args...]
 #
 # RUN names the run directory, runs/RUN (serial.log, stderr.log, qemu.log, qmp.sock).
-# VMDIR (required) is the parent of the VM bundle (VMDIR/vm), relative to the repository root;
-# use a reflink copy of your VM, never the only copy. WINDOW=0 keeps it headless. Only the VM a
+# VMDIR picks the VM bundle's parent (default: the migrated clone that boots to the home
+# screen); never point it at vms/vphone-linux. WINDOW=0 keeps it headless. Only the VM a
 # previous boot-test.sh started is stopped first (runs/*/qmp.sock in its command line);
 # other sessions' QEMUs are left alone.
 #
@@ -15,7 +15,7 @@ set -u
 cd "$(dirname "$0")/.."
 RUNS=$PWD/runs
 R=$RUNS/$1; CID=$2; shift 2
-VMDIR=${VMDIR:?set VMDIR to a test copy of your VM (its bundle in VMDIR/vm), relative to the repository root}
+VMDIR=${VMDIR:-vms/boot-lnx2}
 mkdir -p "$R"
 # Any QEMU binary (A/B copies are named otherwise), found by its runs/*/qmp.sock.
 mine() { for p in $(pgrep -f -- "-qmp unix:$RUNS/"); do

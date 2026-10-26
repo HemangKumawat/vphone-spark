@@ -122,6 +122,28 @@
 #define HAVE_LOCALTIME_R 1
 
 /*
+ * vphone-linux: 2.13's asr.c reads the monotonic clock through Darwin's
+ * clock_gettime_nsec_np(CLOCK_MONOTONIC) — total nanoseconds in one call.
+ * Linux has clock_gettime(2) but nothing of that name, so build the same
+ * result here. Weak-linked only when the translation unit has not already
+ * seen a definition.
+ */
+#if defined(__linux__) && !defined(VPHONE_HAVE_CLOCK_GETTIME_NSEC_NP)
+#include <stdint.h>
+#include <time.h>
+static inline uint64_t clock_gettime_nsec_np(clockid_t clock)
+{
+	struct timespec ts;
+	if (clock_gettime(clock, &ts) != 0) {
+		return 0;
+	}
+	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+#define VPHONE_HAVE_CLOCK_GETTIME_NSEC_NP 1
+#endif
+
+
+/*
  * Deliberately left undefined, to match a macOS ./configure with the defaults:
  *   WIN32, __MINGW_USE_VC2005_COMPAT                   (not Windows)
  *   __LITTLE_ENDIAN, __BIG_ENDIAN, __BYTE_ORDER        (endianness.h covers it)

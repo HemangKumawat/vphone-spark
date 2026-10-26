@@ -39,7 +39,7 @@ Tested guest pairings on Linux:
 | Device | iOS | cloudOS | State |
 |---|---|---|---|
 | iPhone17,3 (iPhone 16 Pro) | 26.6.2 (23G90) | 26.4 (23E5207q) | end-to-end: the home screen, created with no Mac |
-| iPhone19,4 (iPhone Duo) | 27.1 (24A94425) | 26.4 (23E5207q) | boots and unlocks (FEAT_CSSC in QEMU + vphone-cli 2.13.4's X1/CSSC patches); the display scanout is pending |
+| iPhone19,4 (iPhone Duo) | 27.1 (24A94425) | 26.4 (23E5207q) | boots and unlocks (FEAT_CSSC + FEAT_PAUTH_LR in QEMU + vphone-cli 2.13.4's X1/CSSC patches); the display scanout is pending |
 
 **Works**
 

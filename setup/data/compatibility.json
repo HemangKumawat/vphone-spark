@@ -335,7 +335,7 @@
       "linuxTested": false,
       "macTested": false,
       "underTest": true,
-      "note": "Boots and unlocks on Linux (vphoned t=603, unlocked t=854) with our QEMU's FEAT_CSSC (the 27.1 userland carries scalar CSSC; without it the first boot crawls at a trap per instruction) and the X1/CSSC patches in vphone-cli 2.13.4+. The display scanout is still pending: the guest renders but nothing reaches the host window yet. Needs root for fw patch (the seal patcher mounts the restore ramdisk rw)."
+      "note": "Boots and unlocks on Linux (vphoned t=438, unlocked t=478) with our QEMU's FEAT_CSSC + FEAT_PAUTH_LR (the X1 RET/PAC-AUT SPPC forms decode natively; the CPA tagged arithmetic still UNDEFs into the guest's own handler) and the X1/CSSC patches in vphone-cli 2.13.4+. The display scanout is still pending: the guest renders but nothing reaches the host window yet. Needs root for fw patch (the seal patcher mounts the restore ramdisk rw)."
     }
   ]
 }

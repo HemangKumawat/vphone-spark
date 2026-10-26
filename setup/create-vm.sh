@@ -142,14 +142,58 @@ step bundle && {
   dry cp "$VSETUP_SRC/OpenSEP/OpenSEP.bin" "$VM/OpenSEP.bin"
 }
 
+# Download the firmware the pairing names: iOS restore + the cloudOS image.
+# vphone-cli's fw catalog resolves the CDN URLs (and its own cloudOS for a
+# research-board pairing); files land in ~/.cache/vphone and are reused.
+WANT_IOS=${IPSW_URL:-}   # a URL given on the command line skips the resolver
+step firmware && {
+  cache="$HOME/.cache/vphone"
+  [ "$DRY" = 1 ] || mkdir -p "$cache"
+  if [ -n "$WANT_IOS" ]; then
+    IOS_URL=$WANT_IOS IOS_FILE=${IPSW_PATH:-$(basename "$WANT_IOS")}
+  else
+    resolved=$(python3 "$VSETUP_ROOT/lib/get-firmware.py" "$VC" "$DEVICE" \
+               "$IOS" "$PAIR_CLOUDOS") ||
+      die "fw catalog has no pairing for $DEVICE $IOS — pass IPSW_URL= and CLOUDOS_URL="
+    IFS=$'\t' read -r IOS_FILE IOS_URL <<< "$(echo "$resolved" | head -1)"
+    IFS=$'\t' read -r CLOUD_FILE CLOUD_URL <<< "$(echo "$resolved" | sed -n 2p)"
+    [ "${CLOUDOS_IPSW_URL:-}" ] && CLOUD_URL=$CLOUDOS_IPSW_URL CLOUD_FILE=$(basename "$CLOUD_URL")
+    [ -s "$cache/$CLOUD_FILE" ] || dry curl -L --retry 3 -o "$cache/$CLOUD_FILE" "$CLOUD_URL"
+  fi
+  IOS_LOCAL=$cache/$IOS_FILE
+  [ -s "$IOS_LOCAL" ] || dry curl -L --retry 3 -o "$IOS_LOCAL" "$IOS_URL"
+  # cloudOS for `-c` — the resolver's file (or the caller's URL)
+  CLOUDOS_LOCAL=${CLOUD_FILE:+$cache/$CLOUD_FILE}
+  log "  firmware: $IOS_FILE + $CLOUD_FILE (or the given URLs) under $cache"
+}
+
 step prepare && {
-  gpu_bundle="${GPU_DRIVER_BUNDLE:-$VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle}"
-  [ "$DRY" = 1 ] || [ -d "$gpu_bundle" ] || die "GPU driver bundle missing at $gpu_bundle (SETUP.md §5.4):
-     restore the stock cloudOS into a scratch bundle once and extract it, or set
-     GPU_DRIVER_BUNDLE=/path/to/AppleParavirtGPUMetalIOGPUFamily.bundle"
-  local_ipsw="${IPSW_PATH:-$HOME/.cache/vphone/${PAIR_IPSW}}"
+  # The GPU driver's cryptex keys are not public (Apple answers 403 for the
+  # 23E5207q), so it has to come from a stock cloudOS restore. Look in the
+  # usual places before giving up; GPU_DRIVER_BUNDLE= wins always.
+  gpu_bundle=${GPU_DRIVER_BUNDLE:-}
+  if [ -z "$gpu_bundle" ]; then
+    for cand in "$VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle" \
+                "$HOME/.cache/vphone/AppleParavirtGPUMetalIOGPUFamily.bundle"; do
+      [ -d "$cand" ] && { gpu_bundle=$cand; break; }
+    done
+    if [ -z "$gpu_bundle" ]; then
+      # last resort: one extracted tree under $HOME (not a guest dir)
+      gpu_bundle=$(find "$HOME" -maxdepth 4 -type d \
+        -name AppleParavirtGPUMetalIOGPUFamily.bundle -print -quit 2>/dev/null)
+      [ -n "$gpu_bundle" ] && log "Found the GPU driver bundle at $gpu_bundle"
+    fi
+  fi
+  [ "$DRY" = 1 ] || [ -d "$gpu_bundle" ] || die "GPU driver bundle not found (SETUP.md §5.4). Do one of:
+     • restore the stock cloudOS $PAIR_CLOUDOS into a scratch bundle once and
+       7zip-extract AppleParavirtGPUMetalIOGPUFamily.bundle from its System volume,
+     • or fetch one from this release's GPU-driver note and copy it to
+       $VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle,
+     • or set GPU_DRIVER_BUNDLE=/path/to/AppleParavirtGPUMetalIOGPUFamily.bundle"
+  local_ipsw="${IPSW_PATH:-$IOS_LOCAL}"   # from the firmware step
+  cloud_arg="${CLOUDOS_LOCAL:-${CLOUDOS_IPSW_URL:-$PAIR_CLOUDOS}}"
   dry "$VC" fw prepare -l "$VSETUP_DEVICES" "$NAME" \
-      -i "${IPSW_URL:-$local_ipsw}" -c "${CLOUDOS_IPSW_URL:-$PAIR_CLOUDOS}" \
+      -i "${IPSW_URL:-$local_ipsw}" -c "$cloud_arg" \
       --gpu-driver-bundle "$gpu_bundle"
   # iOS 27 pairings need the seal patcher, which mounts the restore ramdisk
   # read-write through linux-apfs-rw (root), and the txm-boot-precheck. The

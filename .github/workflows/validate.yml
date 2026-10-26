@@ -33,6 +33,18 @@ jobs:
           while IFS= read -r -d '' f; do
             shellcheck -x --severity=style "$f"
           done < <(find setup -name '*.sh' -type f -print0)
+      - name: lint the workflow's own run blocks (extracted, whole-script checks)
+        run: |
+          set -e
+          python3 -m pip install --quiet pyyaml 2>/dev/null || sudo apt-get -y install -q python3-yaml
+          rm -rf /tmp/runblocks
+          python3 setup/tools/extract-run-scripts.py .github/workflows/validate.yml /tmp/runblocks
+          status=0
+          for f in /tmp/runblocks/*.sh; do
+            bash -n "$f" || status=1
+            shellcheck -x --severity=warning "$f" || status=1
+          done
+          exit "$status"
 
   data:
     name: compatibility data
@@ -125,6 +137,31 @@ jobs:
             echo 'FAIL: remove the files above — Apple code/firmware is downloaded'
             echo '      from the CDN at run time, never committed.'
             exit 1
+          fi
+
+  e2e:
+    name: end-to-end local harness (full dry run)
+    runs-on: ubuntu-latest
+    needs: [lint, data]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the suite's dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck jq git python3-yaml curl unzip
+      - name: Run test/smoke.sh (everything, one shot)
+        env:
+          # a clean isolated work area; no network needed, nothing boots
+          VSETUP_SRC: /tmp/e2e-src
+          VSETUP_RELEASE: /tmp/e2e-release
+          VSETUP_DEVICES: /tmp/e2e-devices
+        run: |
+          bash setup/test/smoke.sh             # no built tools: the firmware step must degrade cleanly
+          # The built-tools path is exercised on dev machines, where linux-create
+          # has been built under $VSETUP_SRC — run the suite again against it:
+          if [ -x "$PWD/linux-create/.build/out/out/Products/Debug-linux-x86_64/vphone-cli" ]; then
+            VSETUP_SRC=$PWD VSETUP_RELEASE=$PWD VSETUP_DEVICES=/tmp/e2e-devices2 \
+              bash setup/test/smoke.sh
           fi
 
   compat-sync:

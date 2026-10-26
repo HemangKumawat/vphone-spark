@@ -98,12 +98,16 @@ jobs:
           bad_name() {
             local p
             for p in "$@"; do
-              git ls-files | grep -iqE "$p" && { git ls-files | grep -iE "$p"; bad=1; }
+              if git ls-files | grep -iqE "$p"; then
+                git ls-files | grep -iE "$p"
+                bad=1
+              fi
             done
+            return 0  # set -e: non-matching greps are expected, not fatal
           }
           bad_name '\.ipsw$' '\.im4p$' '\.img4$' '\.img$' '\.dmg$' \
             'guest-resources' 'AppleParavirt' '\.dylib$' 'AVP(Booter|SEPBooter)' \
-            'Disk\.img$' 'nvram\.bin$' 'SEPStorage$' '(^|/)ecid$' 'serial$'
+            'Disk\.img$' 'nvram\.bin$' 'SEPStorage$' '(^|/)ecid$' 'serial$' || true
           # large binary blobs: sources + scripts are tiny; over 16 MiB tracked is
           # suspicious. Submodule commits (submodule entries) have no blob of their
           # own and are skipped.

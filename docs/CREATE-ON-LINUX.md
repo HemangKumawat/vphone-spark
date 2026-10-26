@@ -1,5 +1,10 @@
 # Create the VM on Linux
 
+> **The automated path.** `setup/create-vm.sh` runs everything this document describes — the menus
+> (`--device` / `--ios` skip them), the state file per VM so a re-run resumes, and the first boot.
+> This document is the same flow with every command visible, for when a step needs attention by
+> hand.
+
 The whole VM is made on Linux, with no Mac and no file from one: vphone-cli's firmware tooling built
 for Linux (`linux-create/`) downloads and patches the firmware, restores it over USB/IP, and installs
 the custom firmware (CFW) through an SSH ramdisk. The boot ROMs are **OpenAVB** and **OpenSEP**, the

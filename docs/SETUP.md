@@ -4,6 +4,19 @@ From an empty Linux PC to an iPhone home screen in a window, with no Mac: you in
 dependencies, build vphone-linux, create the virtual iPhone from Apple's published firmware, and
 start it.
 
+> **The short path.** `setup/setup.sh` builds everything (dependencies, sources, binaries, the
+> release bundle — re-runnable, it skips what is done), and `setup/create-vm.sh` then menus you
+> down to a tested device + iOS pairing and runs the whole create flow with one state file per VM.
+> That is all most people need:
+>
+> ```sh
+> ./setup/setup.sh
+> ./setup/create-vm.sh
+> ```
+>
+> The rest of this guide is the manual path — the same steps, every command visible — plus the
+> parts the two scripts do not cover (your own apps, performance tuning).
+
 1. [What you need](#1-what-you-need)
 2. [Install the dependencies](#2-install-the-dependencies)
 3. [Build](#3-build)

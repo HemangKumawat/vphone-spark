@@ -1,21 +1,23 @@
 # vphone-setup
 
-A two-step Linux setup for [vphone-linux](https://github.com/YahiaAngelo/vphone-linux):
-**build everything, then pick a device and an iOS version and create the VM.**
+The two-step Linux setup, part of this checkout: **build everything, then pick a device and an iOS
+version and create the VM.** The scripts build THIS checkout (VSETUP_SRC defaults to the repo root)
+and keep all state in `~/vphone-setup-work/` plus one directory per VM.
 
 ```sh
+# from the repo root:
 # step 1 — dependencies + sources + all binaries (re-runnable, resumes)
-./setup.sh
+./setup/setup.sh
 
 # step 2 — interactive device + iOS version menus, then the full create flow
-./create-vm.sh
+./setup/create-vm.sh
 ```
 
 Non-interactive:
 
 ```sh
-./setup.sh -y
-./create-vm.sh --device "iPhone17,3" --ios 26.6.2 --scale 1
+./setup/setup.sh -y
+./setup/create-vm.sh --device "iPhone17,3" --ios 26.6.2 --scale 1
 ```
 
 ## Status: what is actually tested on Linux
@@ -30,7 +32,7 @@ Non-interactive:
 iOS 27 pairings need this repo's QEMU (it implements FEAT_CSSC — without it the
 27.1 first boot crawls at a trap per instruction) and run `fw patch` under sudo
 (the seal patcher mounts the restore ramdisk read-write). Everything else in
-`data/compatibility.json` is **verified on macOS hosts only and under test on
+`setup/data/compatibility.json` is **verified on macOS hosts only and under test on
 Linux**. Choosing one works — the menus label it "mac-tested -- under test", the
 script warns and asks before continuing, and a first run may need manual
 attention (extra patches, restore retries). iOS 18 pairings additionally need a
@@ -43,7 +45,7 @@ macOS kmutil (refused here).
 1. **deps** — installs the distro's packages (Fedora / Debian / Ubuntu / Arch), rustup,
    Swift (for vphone-cli's Linux tooling), rcodesign; checks `vm.max_map_count`
    and `/dev/vhost-vsock`.
-2. **sources** — clones the vphone-linux checkout and its three QEMU/GPU submodules.
+2. **sources** — this checkout (or a `--src` second one) and its three QEMU/GPU submodules.
 3. **build** — reims-vgpu → QEMU (`-M vresearch101`) → vphone-cli's firmware
    tooling for Linux → the restore QEMU (`vusb-restore`) → the 32 KiB usbmuxd.
 4. **release** — downloads vphone-cli's release bundle for the boot ROMs and
@@ -51,7 +53,7 @@ macOS kmutil (refused here).
    `~/vphone-setup-work/` — it never touches any other checkout or
    QEMU instance on the host.
 
-`create-vm.sh` reads `data/compatibility.json` (mirrored from
+`create-vm.sh` reads `setup/data/compatibility.json` (mirrored from
 [vphone-cli's compatibility.md](https://github.com/Lakr233/vphone-cli/blob/main/Documents/Guides/compatibility.md))
 and menus down to one of the tested pairings — e.g.
 
@@ -106,11 +108,11 @@ push/PR, and weekly for pairing drift:
 - **compat-sync** (report-only) — diffs recorded pairings against upstream's
   compatibility.md so new tested combinations surface here before release.
 
-Run the same checks locally: `test/smoke.sh`.
+Run the same checks locally: `setup/test/smoke.sh`.
 
 ## Isolation rules
 
-- All state lives in this checkout (`$VSETUP_ROOT`) and the work directory
+- The build happens in this checkout; the VM bundles and the release tree live in the work directory
   (`VSETUP_SRC`/`VSETUP_RELEASE`/`VSETUP_DEVICES`, default
   `~/vphone-setup-work/…`). Override with `--src` / `--workdir`.
 - No script here enumerates or signals processes; a separate QEMU instance on

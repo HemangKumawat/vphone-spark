@@ -3,7 +3,7 @@
 # Never builds or boots anything; safe next to a running VM.
 set -eu
 cd "$(dirname "$0")/.."
-# shellcheck source=lib/common.sh
+# shellcheck disable=SC1091  # this checkout's own lib/common.sh, resolved at run time
 source "$(pwd)/lib/common.sh"
 
 status=0

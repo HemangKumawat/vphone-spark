@@ -1,0 +1,103 @@
+name: validate
+
+on:
+  push:
+    paths: ['**.sh', 'setup/**', '.github/workflows/validate.yml']
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'   # weekly: catch pairing/validation drift early
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: shellcheck + syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: bash -n (parse every script)
+        run: |
+          set -e
+          while IFS= read -r -d '' f; do
+            echo "::  bash -n $f"
+            bash -n "$f"
+          done < <(find . -name '*.sh' -type f -print0)
+      - name: shellcheck
+        run: |
+          set -e
+          while IFS= read -r -d '' f; do
+            shellcheck -x --severity=style "$f"
+          done < <(find . -name '*.sh' -type f -print0)
+
+  data:
+    name: compatibility data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate pairings JSON
+        run: python3 setup/lib/json_query.py validate
+      - name: --list renders
+        run: ./setup/create-vm.sh --list
+
+  smoke:
+    name: dry-run pipelines
+    runs-on: ubuntu-latest
+    needs: [lint, data]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { device: 'iPhone17,3', ios: '26.6.2' }   # the Linux-tested reference
+          - { device: 'iPhone17,3', ios: '27.0.1' }
+          - { device: 'iPhone18,2', ios: '27.0.1' }
+          - { device: 'iPhone19,4', ios: '27.1' }     # the Duo: under test on Linux
+          - { device: 'iPad16,1',   ios: '26.6.2' }
+    env:
+      # Every dry-run assertion lives here: no VM manages to start, nothing
+      # touches the network, and no command executes.
+      VSETUP_SRC: /tmp/vset-src
+      VSETUP_RELEASE: /tmp/vset-release
+      VSETUP_DEVICES: /tmp/vset-devices
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dry-run full pipeline for ${{ matrix.device }} ${{ matrix.ios }}
+        run: |
+          mkdir -p "$VSETUP_SRC" "$VSETUP_RELEASE" "$VSETUP_DEVICES"
+          ./setup/create-vm.sh --dry-run -y \
+            --device '${{ matrix.device }}' --ios '${{ matrix.ios }}' \
+            --name ci-${{ matrix.device }}-${{ matrix.ios }} > out.log 2>&1 || true
+          cat out.log
+          test "$(grep -c 'dry-run' out.log)" -ge 5
+
+      - name: Assert the dry-run never started (nor killed) any QEMU/vm
+        run: |
+          if pgrep -x qemu-system-aar; then
+            echo 'FAIL: a QEMU process is running after the dry run'; pgrep -ax qemu-system-aar; exit 1
+          fi
+          # no process-kill logic at all in setup scripts (a never-fight-others rule)
+          if grep -nE '(^|[^[:alnum:]_])(pkill|killall|fuser -k|kill(-9| )?[[:space:]])' \
+              setup/setup.sh setup/create-vm.sh setup/lib/common.sh 2>/dev/null; then
+            echo 'FAIL: kill commands are not allowed in setup scripts'; exit 1
+          fi
+
+  compat-sync:
+    name: report upstream pairing drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Diff tested pairings vs upstream compatibility.md (report-only)
+        continue-on-error: true
+        run: |
+          curl -sL https://raw.githubusercontent.com/Lakr233/vphone-cli/main/Documents/Guides/compatibility.md -o up.md
+          # pairs mentioned upstream but missing here, as a diff summary:
+          grep -oE '`[0-9A-Za-z,]+_[0-9]+\.[0-9]+(\.[0-9]+)?b?_[0-9A-Za-z]+`' up.md | sort -u > up.txt
+          jq -r '.pairings[] | select(.unsupported!=true) | .ipsw' setup/data/compatibility.json \
+            | sort -u | sed 's/`//g' > mine.txt
+          echo 'Pairings recorded upstream but not in data/ (informational):'
+          comm -23 up.txt mine.txt || true

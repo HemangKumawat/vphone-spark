@@ -30,3 +30,6 @@ linux-create/Sources/
 /vphone-cli/
 /ipsws/
 /drivers/
+
+# The setup's own state
+setup/tmp/

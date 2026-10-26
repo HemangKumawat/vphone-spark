@@ -1,0 +1,341 @@
+{
+  "_meta": {
+    "schemaVersion": 1,
+    "source": "https://github.com/Lakr233/vphone-cli/blob/main/Documents/Guides/compatibility.md",
+    "syncedAt": "2026-10-26",
+    "comment": "Device + firmware pairings vphone-linux can create. linuxTested = verified end-to-end on a Linux host; presets are vphone-cli vm create presets."
+  },
+  "devices": [
+    {
+      "id": "iPhone17,3",
+      "name": "iPhone 16 Pro",
+      "note": "The reference device: newest cloudOS that still carries the vphone600ap identity the guest firmware comes from is 26.4-23E5207q."
+    },
+    {
+      "id": "iPhone18,1",
+      "name": "iPhone 17 Pro"
+    },
+    {
+      "id": "iPhone18,2",
+      "name": "iPhone 17 Pro Max"
+    },
+    {
+      "id": "iPhone19,4",
+      "name": "iPhone Duo",
+      "screen": [
+        1398,
+        2034,
+        460,
+        3.0
+      ],
+      "note": "The foldable: its device tree carries two panels; the VM presents the outer one (display0, 1398x2034). The inner panel and the hinge are not emulated."
+    },
+    {
+      "id": "iPhone19,2",
+      "name": "iPhone 18 Pro"
+    },
+    {
+      "id": "iPhone11,6",
+      "name": "iPhone XS Max"
+    },
+    {
+      "id": "iPad16,1",
+      "name": "iPad Pro 11-inch"
+    },
+    {
+      "id": "Watch7,18",
+      "name": "Apple Watch Series 7 (research board)"
+    },
+    {
+      "id": "AppleTV5,3",
+      "name": "Apple TV HD"
+    },
+    {
+      "id": "AppleTV14,1",
+      "name": "Apple TV 4K"
+    },
+    {
+      "id": "AudioAccessory5,1",
+      "name": "HomePod mini"
+    }
+  ],
+  "pairings": [
+    {
+      "device": "iPhone17,3",
+      "osVersion": "26.6.2",
+      "build": "23G90",
+      "ipsw": "iPhone17,3_26.6.2_23G90_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [],
+      "linuxTested": true,
+      "macTested": true,
+      "recommended": true,
+      "note": "The ONLY pairing verified end-to-end on Linux (restore, CFW, boot, home screen). Other pairings are macOS-tested and under test."
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "27.0.1",
+      "build": "24A446",
+      "ipsw": "iPhone17,3_27.0.1_24A446_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission"
+      ],
+      "patchMinBundle": "2.6.0",
+      "linuxTested": false,
+      "macTested": true,
+      "underTest": true,
+      "note": "Needs the txm-boot-precheck patch (in vphone-cli bundle 2.6.0+); earlier bundles panic at first boot (unexpected SIGKILL of init). Currently under test on Linux."
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "27.0",
+      "build": "24A435",
+      "ipsw": "iPhone17,3_27.0_24A435_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true,
+      "note": "PR #486: patches, restore, CFW, boot, vphoned ping."
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "26.6",
+      "build": "23G71",
+      "ipsw": "iPhone17,3_26.6_23G71_Restore.ipsw",
+      "cloudOS": "26.6-23G71",
+      "preset": "standard",
+      "extraPatches": [
+        "research-board"
+      ],
+      "linuxTested": false,
+      "macTested": true,
+      "note": "Research-board pairing: fw patch turns the 26.6 cloudOS's device tree and SEP into vphone600's; GPU driver comes from a temporary stock cloudOS restore."
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "26.5",
+      "build": "23F77",
+      "ipsw": "iPhone17,3_26.5_23F77_Restore.ipsw",
+      "cloudOS": "26.5-23F75",
+      "preset": "standard",
+      "extraPatches": [
+        "research-board"
+      ],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "26.4",
+      "build": "23E246",
+      "ipsw": "iPhone17,3_26.4_23E246_Restore.ipsw",
+      "cloudOS": "26.4-23E244",
+      "preset": "standard",
+      "extraPatches": [
+        "research-board"
+      ],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "iPhone18,1",
+      "osVersion": "27.0.1",
+      "build": "24A446",
+      "ipsw": "iPhone18,1_27.0.1_24A446_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission",
+        "kernel-boot-shared_region_size"
+      ],
+      "patchMinBundle": "2.6.0",
+      "linuxTested": false,
+      "macTested": true,
+      "note": "Needs kernel-boot-shared_region_size (default in standard for an iOS 27 base since bundle 2.6.0)."
+    },
+    {
+      "device": "iPhone18,1",
+      "osVersion": "26.6.2",
+      "build": "23G90",
+      "ipsw": "iPhone18,1_26.6.2_23G90_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "iPhone18,2",
+      "osVersion": "27.0.1",
+      "build": "24A446",
+      "ipsw": "iPhone18,2_27.0.1_24A446_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission",
+        "kernel-boot-shared_region_size"
+      ],
+      "patchMinBundle": "2.6.0",
+      "linuxTested": false,
+      "macTested": true,
+      "note": "27.0.1's dyld cache no longer fits the 0x180000000 cloudOS shared region; the shared_region_size patch widens it. Without it, launchd panics at first boot."
+    },
+    {
+      "device": "iPhone19,2",
+      "osVersion": "27.0.1",
+      "build": "24A446",
+      "ipsw": "iPhone19,2_27.0.1_24A446_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission",
+        "kernel-boot-shared_region_size",
+        "arm64e_x1"
+      ],
+      "patchMinBundle": "2.6.0",
+      "linuxTested": false,
+      "macTested": true,
+      "note": "Boots with integrated ARM64E_X1 support (validated 2026-10-17 on a Mac26 host)."
+    },
+    {
+      "device": "iPhone11,6",
+      "osVersion": "18.7.2",
+      "build": "22H124",
+      "ipsw": "iPhone11,6_18.7.2_22H124_Restore.ipsw",
+      "cloudOS": "18.7.2-22H43",
+      "preset": "minimal",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true,
+      "requiresMacBuilder": true,
+      "note": "Kernel-first iOS 18: the kernelcache mix must be linked by a macOS 15/26 kmutil over ssh (VPHONE_KMUTIL_SSH). Needs access to another Mac or a macOS VM."
+    },
+    {
+      "device": "iPhone11,6",
+      "osVersion": "18.6",
+      "build": "22G86",
+      "ipsw": "iPhone11,6_18.6_22G86_Restore.ipsw",
+      "cloudOS": "18.6-22G86",
+      "preset": "minimal",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true,
+      "requiresMacBuilder": true
+    },
+    {
+      "device": "iPhone11,6",
+      "osVersion": "18.1",
+      "build": "22B83",
+      "ipsw": "iPhone11,6_18.1_22B83_Restore.ipsw",
+      "cloudOS": "18.1-22B83",
+      "preset": "minimal",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true,
+      "requiresMacBuilder": true
+    },
+    {
+      "device": "iPad16,1",
+      "osVersion": "27.0.1",
+      "build": "24A446",
+      "ipsw": "iPad16,1,iPad16,2_27.0.1_24A446_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission"
+      ],
+      "patchMinBundle": "2.6.0",
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "iPad16,1",
+      "osVersion": "26.6.2",
+      "build": "23G90",
+      "ipsw": "iPad16,1,iPad16,2_26.6.2_23G90_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "Watch7,18",
+      "osVersion": "26.4",
+      "build": "23T240",
+      "ipsw": "Watch7,18_26.4_23T240_Restore.ipsw",
+      "cloudOS": "26.4-23E244",
+      "preset": "watchos",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "AppleTV5,3",
+      "osVersion": "26.6",
+      "build": "23G71",
+      "ipsw": "AppleTV5,3_26.6_23G71_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "tvos",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "AppleTV14,1",
+      "osVersion": "26.6",
+      "build": "23G71",
+      "ipsw": "AppleTV14,1_26.6_23G71_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "tvos-4k",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "AudioAccessory5,1",
+      "osVersion": "27.0",
+      "build": "24J361",
+      "ipsw": "AudioAccessory5,1_27.0_24J361_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "homepod-mini",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": true
+    },
+    {
+      "device": "iPhone17,3",
+      "osVersion": "27.1",
+      "build": "unknown",
+      "ipsw": null,
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [],
+      "linuxTested": false,
+      "macTested": false,
+      "unsupported": true,
+      "note": "reserved placeholder for the in-progress iOS 27.1 bring-up; created automatically but intentionally not listed as a choice until it boots"
+    },
+    {
+      "device": "iPhone19,4",
+      "osVersion": "27.1",
+      "build": "24A94425",
+      "ipsw": "iPhone19,4_27.1_24A94425_Restore.ipsw",
+      "cloudOS": "26.4-23E5207q",
+      "preset": "standard",
+      "extraPatches": [
+        "txm-boot-precheck_admission",
+        "cssc_emulation"
+      ],
+      "patchMinBundle": "2.13.4",
+      "linuxTested": false,
+      "macTested": false,
+      "underTest": true,
+      "note": "Boots and unlocks on Linux (vphoned t=603, unlocked t=854) with our QEMU's FEAT_CSSC (the 27.1 userland carries scalar CSSC; without it the first boot crawls at a trap per instruction) and the X1/CSSC patches in vphone-cli 2.13.4+. The display scanout is still pending: the guest renders but nothing reaches the host window yet. Needs root for fw patch (the seal patcher mounts the restore ramdisk rw)."
+    }
+  ]
+}

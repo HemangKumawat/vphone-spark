@@ -10,6 +10,7 @@
 # state file per VM, so a re-run resumes after an interrupted step. QEMU is
 # only ever STARTED here (the last step, once); this script has no kill logic.
 set -Eeuo pipefail
+# shellcheck disable=SC1091  # this checkout's own lib/common.sh, resolved at run time
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 DEVICE=${DEVICE:-} IOS=${IOS:-} CLOUDOS_PICK=${CLOUDOS_PICK:-}

@@ -12,6 +12,7 @@
 #
 # This script never runs a VM or QEMU; it only builds binaries.
 set -Eeuo pipefail
+# shellcheck disable=SC1091  # this checkout's own lib/common.sh, resolved at run time
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 VSETUP_ASSUME_YES=${VSETUP_ASSUME_YES:-0}

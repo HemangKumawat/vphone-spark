@@ -85,6 +85,51 @@ jobs:
             echo 'FAIL: kill commands are not allowed in setup scripts'; exit 1
           fi
 
+  no-apple-content:
+    name: no Apple code or firmware in the repo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject any committed Apple firmware, image or guest binary
+        run: |
+          set -e
+          bad=0
+          # tracked files whose names look like Apple software or guest state
+          bad_name() {
+            local p
+            for p in "$@"; do
+              git ls-files | grep -iqE "$p" && { git ls-files | grep -iE "$p"; bad=1; }
+            done
+          }
+          bad_name '\.ipsw$' '\.im4p$' '\.img4$' '\.img$' '\.dmg$' \
+            'guest-resources' 'AppleParavirt' '\.dylib$' 'AVP(Booter|SEPBooter)' \
+            'Disk\.img$' 'nvram\.bin$' 'SEPStorage$' '(^|/)ecid$' 'serial$'
+          # large binary blobs: sources + scripts are tiny; over 16 MiB tracked is
+          # suspicious. Submodule commits (submodule entries) have no blob of their
+          # own and are skipped.
+          while IFS=' ' read -r otype f; do
+            [ "$otype" = blob ] || continue
+            sz=$(git cat-file -s "HEAD:$f")
+            if [ "$sz" -gt 16777216 ]; then
+              echo "FAIL: $f is $(numfmt --to=iec "$sz")"
+              bad=1
+            fi
+          done < <(git ls-tree -r --format='%(objecttype) %(path)' HEAD)
+          if [ "$bad" = 0 ]; then
+            echo 'ok: no Apple software or large blobs tracked'
+          else
+            echo 'FAIL: remove the files above — Apple code/firmware is downloaded'
+            echo '      from the CDN at run time, never committed.'
+            exit 1
+          fi
+          if [ "$bad" = 0 ]; then
+            echo 'ok: no Apple software or large blobs tracked'
+          else
+            echo 'FAIL: remove the files above — Apple code/firmware is downloaded'
+            echo '      from the CDN at run time, never committed.'
+            exit 1
+          fi
+
   compat-sync:
     name: report upstream pairing drift
     runs-on: ubuntu-latest

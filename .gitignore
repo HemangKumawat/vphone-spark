@@ -33,3 +33,7 @@ linux-create/Sources/
 
 # The setup's own state
 setup/tmp/
+# Setup work dirs outside the tree and anything the pipeline stages
+vphone-setup-work/
+opensshrd/
+sshramdisk/

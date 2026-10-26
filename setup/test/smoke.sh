@@ -3,17 +3,19 @@
 # Never builds or boots anything; safe next to a running VM.
 set -eu
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/common.sh
+source "$(pwd)/lib/common.sh"
 
 status=0
-for f in $(find . -name '*.sh' -type f | sort); do
+for f in $(find "$VSETUP_ROOT" -name '*.sh' -type f | sort); do
   bash -n "$f" || { echo "FAIL bash -n $f"; status=1; }
 done
 if command -v shellcheck >/dev/null; then
   # shellcheck disable=SC2046  # the filenames have no spaces in this checkout
-  shellcheck -x --severity=style $(find . -name '*.sh' -type f) || status=1
+  shellcheck -x --severity=style $(find "$VSETUP_ROOT" -name '*.sh' -type f) || status=1
 fi
-python3 lib/json_query.py validate || status=1
-./create-vm.sh --list >/dev/null || status=1
+python3 "$VSETUP_ROOT/lib/json_query.py" validate || status=1
+"$VSETUP_ROOT/create-vm.sh" --list >/dev/null || status=1
 
 # dry-run sanity for the reference pairing
 VSETUP_SRC=/tmp/vs-src VSETUP_RELEASE=/tmp/vs-rel VSETUP_DEVICES=/tmp/vs-dev \

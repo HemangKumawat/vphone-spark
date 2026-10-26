@@ -100,11 +100,14 @@ fi
 NAME=${NAME:-vphone-${DEVICE//,/-}-${IOS//./}}
 VM=$VSETUP_DEVICES/$NAME
 STATE=$VM/.create-state
+[ "$DRY" = 1 ] || mkdir -p "$VM"
 done_step() { grep -qxs "^$1$" "$STATE" 2>/dev/null; }
 dry() { if [ "$DRY" = 1 ]; then printf '   \033[2m[dry-run]\033[0m %s\n' "$*"; else
         # shellcheck disable=SC2016  # the point is to show the raw command
         echo '+ '"$*"' (not executed in a dry run)' >&2; "$@"; fi; }
-mark() { [ "$DRY" = 1 ] || printf '%s\n' "$1" >> "$STATE"; }
+mark() { # record a finished step; the VM dir may not exist yet at mark time
+  [ "$DRY" = 1 ] || { mkdir -p "$VM"; printf '%s\n' "$1" >> "$STATE"; }
+}
 step() { local key=$1; shift
   if done_step "$key"; then log "  • $key  (already done)"; return 0; fi
   log "▶ $key"

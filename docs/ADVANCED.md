@@ -89,9 +89,21 @@ is the same patch vphone-cli applies for iPads (`IBootPatchDisplayScale`).
 `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`),
 and vphoned clears that cache only when the device tree changes, which a scale change does not. With
 the stale cache, a VM patched to 1x boots with a 3x interface on the 1x screen: everything zoomed in.
-`tools/set-scale.sh VM 1|2|3` does the whole change with the VM running: it deletes the cache through
-vphoned, shuts the guest down, patches LLB and writes `gfx-res`. By hand, delete that file (vphoned's
+`tools/set-scale.sh VM 1|2|3` does the whole change with the VM running: it sets the scale in the
+guest's device tree (below), deletes the cache through vphoned, shuts the guest down, patches LLB and
+writes `gfx-res`, sized from the VM's own 3x size (kept in `gfx-res.3x`). By hand, delete that file (vphoned's
 `files.remove`, `force`) before shutting down, then:
+
+**iOS 27 also reads the device tree.** `cfw install` copies the board's `/product`
+`artwork-scale-factor` (3) into the guest's device tree, and iOS 27 takes the screen scale from it
+as well: with only LLB patched, a 2x VM still shows a 3x interface, zoomed in.
+`tools/guest-dt-scale.py CID [SCALE]` sets it (and any `/product/display*` `display-scale`) in the
+guest's Preboot `devicetree.img4` through vphoned, keeping the original in the guest
+(`devicetree.img4.before-scale`) and on the host (`runs/guest-dt-scale/`). `set-scale.sh` runs it.
+
+**iOS 27 does not go below 2x.** With LLB and the device tree both at 1, an iPhone Duo on iOS 27.1
+still reported `UIScreen.scale` 2 and drew a 2x interface on the 1x screen. Use 2x there: the Duo
+(1398x2034 at 3x) runs at 960x1356, 480x678 points. 1x works on iOS 26.
 
 ```sh
 python3 tools/display-scale.py vms/myphone/nvram.bin        # show the current state

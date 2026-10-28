@@ -337,16 +337,39 @@ step cfw      do_cfw
 # ------------------------------------------------------------- first boot --
 # The only place a VM is started: once (twice when the scale needs the guest's device tree
 # changed, after vphoned has shut the guest down), in the background, for THIS VM alone.
-vrpc() { CID=$CID "$T/vphoned.sh" POST /v1/rpc "$1"; }
+# vphoned answers slowly while the first boot migrates (30 s and more): long timeouts throughout.
+vrpc() { CID=$CID VPHONED_TIMEOUT=120 "$T/vphoned.sh" POST /v1/rpc "$1"; }
+vphoned_up() {
+  CID=$CID VPHONED_TIMEOUT=120 timeout 150 "$T/vphoned.sh" GET /v1/health 2>/dev/null | grep -q '"status":"ok"'
+}
+# The VM this script started, by the pid it recorded: still this VM's QEMU (it has this VM's
+# Disk.img open) after a re-run. One known pid is checked; no process is searched for.
+QEMU_PIDFILE=$VM/.qemu.pid
+running_vm() {
+  local pid
+  pid=$(cat "$QEMU_PIDFILE" 2>/dev/null) || return 1
+  [ -n "$pid" ] && tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "file=$VM/Disk.img" &&
+    QEMU_PID=$pid
+}
 boot_vm() {
-  GFX=${GFX:-1} WINDOW=${WINDOW:-1} CID=$CID "$QEMU_RUN" "$VM" > "$VM/serial.log" 2>&1 &
-  QEMU_PID=$!
-  log "  QEMU output → $VM/serial.log; waiting for vphoned"
-  until CID=$CID timeout 20 "$T/vphoned.sh" GET /v1/health 2>/dev/null | grep -q '"status":"ok"'; do
+  if running_vm; then
+    log "  this VM is already running (QEMU pid $QEMU_PID): waiting for vphoned"
+  else
+    GFX=${GFX:-1} WINDOW=${WINDOW:-1} CID=$CID "$QEMU_RUN" "$VM" > "$VM/serial.log" 2>&1 &
+    QEMU_PID=$!
+    printf '%s\n' "$QEMU_PID" > "$QEMU_PIDFILE"
+    log "  QEMU output → $VM/serial.log; waiting for vphoned"
+  fi
+  until vphoned_up; do
     [ -d "/proc/$QEMU_PID" ] || die "QEMU exited; see $VM/serial.log"
     sleep 10; printf '.' >&2
   done
   echo >&2
+}
+# Waits for the VM's QEMU to exit (after vphoned shut the guest down); it need not be this
+# shell's child, so its /proc entry is watched.
+wait_vm_exit() {
+  while [ -d "/proc/$QEMU_PID" ]; do sleep 2; done
 }
 unlock_vm() {
   local i
@@ -382,7 +405,7 @@ do_first_boot() {
     python3 "$T/guest-dt-scale.py" "$CID" "$SCALE"
     log "  restarting the guest for the ${SCALE}x screen"
     vrpc '{"method":"system.shutdown","params":{"force":true},"id":1}'; echo
-    wait "$QEMU_PID" || true
+    wait_vm_exit
     boot_vm
     unlock_vm
     if [ "$SCALE" = 1 ]; then python3 "$T/guest-1x-logo.py" "$CID"; fi

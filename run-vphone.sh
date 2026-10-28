@@ -21,7 +21,7 @@ set -euo pipefail
 
 VM=${1:?usage: run-vphone.sh <vm-dir> [qemu args...]}
 shift
-QEMU=${QEMU:-$HOME/vphone-linux/qemu/build/qemu-system-aarch64}
+QEMU=${QEMU:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/qemu/build/qemu-system-aarch64}   # this checkout's
 SMP=${SMP:-8}
 MEM=${MEM:-8G}
 

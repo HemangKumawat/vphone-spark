@@ -19,7 +19,7 @@ fifo = os.path.join(d, "int.fifo")
 os.mkfifo(fifo)
 env = dict(os.environ, LOG=fifo, DFLAGS=os.environ.get("DFLAGS", "int,unimp"),
            SMP=os.environ.get("SMP", "8"))
-p = subprocess.Popen(["timeout", str(a.secs), os.path.expanduser("~/vphone-linux/run-vphone.sh"), a.vm],
+p = subprocess.Popen(["timeout", str(a.secs), os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "run-vphone.sh"), a.vm],
                      env=env, stdout=open(os.path.join(a.vm, "ff.out"), "w"),
                      stderr=subprocess.STDOUT, start_new_session=True)
 hist = collections.deque(maxlen=a.ctx)

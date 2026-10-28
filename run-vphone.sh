@@ -64,6 +64,9 @@ args=(
 if [ -f "$VM/SEPStorage" ]; then
   args+=(-drive "file=$VM/SEPStorage,if=none,id=sep-storage,format=raw,file.locking=off")
 fi
+# The NIC's MAC (the machine's virtio-net-pci, user networking). Without a mac file every VM gets
+# QEMU's default 52:54:00:12:34:56, so clones of one golden would share it (docs/DENSITY.md).
+[ -f "$VM/mac" ] && args+=(-nic "user,mac=$(tr -d ' \n' < "$VM/mac")")
 
 if [ "${GFX:-0}" = 1 ]; then
   # apple-gfx needs guest RAM as a shared file mapping
@@ -79,8 +82,8 @@ if [ "${GFX:-0}" = 1 ]; then
   # A shared file mapping aligned past the guest's 16 KiB pages: reims-vgpu's
   # per-task processes map guest RAM in whole guest pages (memfd has no align)
   args+=(-object "memory-backend-file,id=ram0,size=$MEM,mem-path=/dev/shm,share=on,align=2M"
-         -global apple-gfx-mmio.resolution=$GFX_RES
-         -global apple-gfx-mmio.process-isolation=${GFX_ISOLATION:-on})
+         -global "apple-gfx-mmio.resolution=$GFX_RES"
+         -global "apple-gfx-mmio.process-isolation=${GFX_ISOLATION:-on}")
   export REIMS_VGPU_WINDOW=${WINDOW:-0}
   export REIMS_VGPU_WINDOW_TITLE=${REIMS_VGPU_WINDOW_TITLE:-vphone-linux}
   # Every GPU task process must pick the same Vulkan device as QEMU (a task

@@ -1,0 +1,36 @@
+# Many phones on one host (docs/DENSITY.md): the identity policy every phone folder follows, and
+# the launch profiles tools/phone-up.sh boots a phone with.
+
+[identity]
+# Always, not a setting: every phone folder carries its own `serial` and `mac`, and
+# tools/phone-up.sh refuses to boot a phone whose serial, MAC or vsock CID another phone folder
+# also has. Without them every clone reports QEMU's defaults: serial "1234" (hw/vmapple/cfg.c) and
+# MAC 52:54:00:12:34:56.
+# Capture the golden before any app install or sign-in: whatever it holds, every clone inherits,
+# accounts and keychain items included.
+#
+# Clones keep the golden's ECID (and so its udid-prediction.txt) until a clone with a new ECID is
+# shown to boot: the restore personalised the golden's firmware for that ECID. Read by the fleet
+# manager when it makes a phone. Untested on Spark.
+rotate_ecid = false
+
+# Each key is the run-vphone.sh environment variable of that name. A variable already set in the
+# caller's environment wins (GFX=0 tools/phone-up.sh A lite).
+[profile.full]
+# One phone used like a real one: run-vphone.sh's defaults.
+SMP = 8
+MEM = "8G"
+GFX = 1
+
+[profile.lite]
+# Many phones, each running one light app. Inferred from x86 measurements, untested on Spark:
+# whether iOS runs well at 4 vCPUs and 4 GiB is the first thing to check (docs/DENSITY.md).
+SMP = 4
+MEM = "4G"
+GFX = 1
+# A smaller TCG code cache: it is resident memory per phone, and one light app keeps far fewer
+# translated blocks live than the whole-UI use the 2048/4096 MiB defaults were sized for.
+TB_SIZE = 1024
+# Empty: let the scheduler spread phones over every core. run-vphone.sh otherwise pins each phone
+# to the fast cores only, and eight phones need the slow cores too.
+VPHONE_CPUS = ""

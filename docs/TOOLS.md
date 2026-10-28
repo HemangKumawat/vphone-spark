@@ -27,6 +27,9 @@ Common arguments:
 | Tool | Usage | What it does |
 |---|---|---|
 | `boot-test.sh` | `VMDIR=vms/test tools/boot-test.sh RUN CID [qemu args]` | Boots `VMDIR/vm` with the GPU and a window (`WINDOW=0` for headless) and a QMP socket in `runs/RUN/`. Waits for vphoned, then retries `screen.unlock` until the guest unlocks. Prints `vphoned up t=...` and `unlocked t=...`, or `fatal`. First stops any VM a previous `boot-test.sh` started, and refuses to boot a `Disk.img` that another QEMU holds. Environment (`SMP`, `QEMU`, `VPHONE_*`, ...) passes through. Use a copy of your VM. |
+| `phone-up.sh` | `tools/phone-up.sh ID\|DIR [PROFILE] [qemu args]` | Boots one phone of a many-phones host with a profile from `config/profiles.toml`; refuses (exit 2) a phone whose state files are already open, and a golden. See [DENSITY.md](DENSITY.md#tools). |
+| `phone-isolation-check.sh` | `tools/phone-isolation-check.sh GOLDEN A B` | Checks on disk, without booting, that two phones are isolated reflinks of one golden. See [DENSITY.md](DENSITY.md#tools). |
+| `phones-volume.sh` | `sudo tools/phones-volume.sh IMAGE SIZE [MOUNTPOINT]` | Mounts a reflink XFS volume kept in one file, for ext4 hosts. See [DENSITY.md](DENSITY.md#tools). |
 | `stuck.sh` | `tools/stuck.sh VM_DIR SECONDS [qemu args]` | Boots with a gdb stub, waits, then prints every CPU's pc/sp/lr/cpsr, CPU 0's ELR/ESR/FAR and TTBRs, and the code around them. For boots that hang. |
 | `firstfault.py` | `tools/firstfault.py VM_DIR [--after TEXT] [--n N] [--secs S] [--ctx L]` | Boots with `-d int,unimp` streamed through a FIFO and prints the exception log around the first N aborts or undefined instructions after a trigger line (default `Guarded Execution Enter`). Avoids multi-GB logs. |
 

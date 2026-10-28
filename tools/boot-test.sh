@@ -17,9 +17,13 @@ RUNS=$PWD/runs
 R=$RUNS/$1; CID=$2; shift 2
 VMDIR=${VMDIR:-vms/boot-lnx2}
 mkdir -p "$R"
-# Any QEMU binary (A/B copies are named otherwise), found by its runs/*/qmp.sock.
+# Any QEMU binary (A/B copies are named otherwise), found by its runs/*/qmp.sock; never a phone
+# tools/phone-up.sh started (-name phone-ID, docs/DENSITY.md).
 mine() { for p in $(pgrep -f -- "-qmp unix:$RUNS/"); do
-  tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | grep -q "$RUNS/.*/qmp.sock" && echo "$p"; done; }
+  case $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null) in
+    *"-name phone-"*) ;;
+    *"$RUNS/"*/qmp.sock*) echo "$p" ;;
+  esac; done; }
 for p in $(mine); do kill "$p"; done
 sleep 5
 # A VM wedged after a GPU fault ignores SIGTERM.

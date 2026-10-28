@@ -150,6 +150,7 @@ instead. The step-by-step manual path, with the packages and every command, is
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
 | [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |
+| [docs/DENSITY.md](docs/DENSITY.md) | Many phones on one host: one read-only golden, per-phone reflinks and identity, profiles, phones per DGX Spark |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | The TCG performance work, every tuning switch, and how to profile |
 | [docs/TOOLS.md](docs/TOOLS.md) | Each script in `tools/` |
 | [docs/LICENSING.md](docs/LICENSING.md) | Licenses of the parts |

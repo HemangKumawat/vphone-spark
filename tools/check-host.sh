@@ -1,5 +1,6 @@
 #!/bin/bash
 # Check this PC against vphone-linux's requirements (docs/SETUP.md). Changes nothing.
+# --runtime skips the build tools: a host that only runs phones (vphone-fleet doctor) needs none.
 ok=0; warn() { echo "  ! $*"; ok=1; }; pass() { echo "  ok $*"; }
 echo "vphone-linux host check"
 arch=$(uname -m)
@@ -50,7 +51,9 @@ ctl=" $(cat "$cg/cgroup.controllers" 2>/dev/null) "
 z=$(cat /sys/module/zswap/parameters/enabled 2>/dev/null)
 [ "$z" = Y ] && [ -n "$(swapon --noheadings 2>/dev/null)" ] && pass "zswap on, swap present (vphone-fleet memory_reclaim can be turned on)" ||
   note "zswap ${z:-absent}, swap: $(swapon --noheadings --show=NAME 2>/dev/null | tr '\n' ' ')- keep vphone-fleet's memory_reclaim off until both are set up (docs/DENSITY.md)"
-command -v cargo >/dev/null && pass "Rust (cargo)" || warn "Rust not installed (https://rustup.rs)"
-command -v ninja >/dev/null && command -v meson >/dev/null && pass "meson and ninja" || warn "meson or ninja missing"
+if [ "${1:-}" != --runtime ]; then
+  command -v cargo >/dev/null && pass "Rust (cargo)" || warn "Rust not installed (https://rustup.rs)"
+  command -v ninja >/dev/null && command -v meson >/dev/null && pass "meson and ninja" || warn "meson or ninja missing"
+fi
 [ $ok = 0 ] && echo "All checks passed." || echo "Fix the items marked ! before building or booting."
 exit $ok

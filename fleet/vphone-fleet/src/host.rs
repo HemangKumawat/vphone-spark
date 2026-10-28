@@ -2,30 +2,50 @@
 //! affinity, and its vphoned (over vsock, without the API proxy, so checks never count as use).
 
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Lines, Read, Write};
 use std::mem;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde_json::{Value, json};
 use vphone_api_proxy::Upstream;
 
 /// How long one QMP command or one vphoned request may take. vphoned answers `/v1/health` at
 /// once; a phone that takes longer counts as not answering.
-const CALL_TIMEOUT: Duration = Duration::from_secs(5);
+pub(crate) const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Sends one QMP command (`stop`, `cont`, `query-status`) and returns its `return` line.
-pub(crate) fn qmp(socket: &Path, command: &str) -> Result<String, String> {
-    let fail = |e: &dyn std::fmt::Display| format!("QMP {} {command}: {e}", socket.display());
-    let stream = UnixStream::connect(socket).map_err(|e| fail(&e))?;
-    stream
-        .set_read_timeout(Some(CALL_TIMEOUT))
-        .map_err(|e| fail(&e))?;
-    let mut writer = stream.try_clone().map_err(|e| fail(&e))?;
-    let mut lines = BufReader::new(stream).lines();
-    let mut answer = |what: &str| -> Result<String, String> {
+/// One QMP connection, past its greeting and `qmp_capabilities`. QEMU serves one client at a
+/// time, so hold it only for one exchange.
+#[derive(Debug)]
+pub(crate) struct Qmp {
+    socket: PathBuf,
+    writer: UnixStream,
+    lines: Lines<BufReader<UnixStream>>,
+}
+
+impl Qmp {
+    pub(crate) fn connect(socket: &Path) -> Result<Self, String> {
+        let fail = |e: &dyn std::fmt::Display| format!("QMP {}: {e}", socket.display());
+        let stream = UnixStream::connect(socket).map_err(|e| fail(&e))?;
+        stream
+            .set_read_timeout(Some(CALL_TIMEOUT))
+            .map_err(|e| fail(&e))?;
+        let writer = stream.try_clone().map_err(|e| fail(&e))?;
+        let mut qmp = Self {
+            socket: socket.to_owned(),
+            writer,
+            lines: BufReader::new(stream).lines(),
+        };
+        qmp.answer("the greeting")?;
+        qmp.execute("qmp_capabilities", None)?;
+        Ok(qmp)
+    }
+
+    fn answer(&mut self, what: &str) -> Result<String, String> {
+        let fail = |e: &dyn std::fmt::Display| format!("QMP {} {what}: {e}", self.socket.display());
         // Events ({"event": ...}) can come before the answer.
-        for line in lines.by_ref() {
+        for line in self.lines.by_ref() {
             let line = line.map_err(|e| fail(&e))?;
             if line.contains("\"return\"") || line.contains("\"QMP\"") {
                 return Ok(line);
@@ -34,17 +54,28 @@ pub(crate) fn qmp(socket: &Path, command: &str) -> Result<String, String> {
                 return Err(fail(&line));
             }
         }
-        Err(fail(&format!("closed before the answer to {what}")))
-    };
-    answer("the greeting")?;
-    for cmd in ["qmp_capabilities", command] {
-        writeln!(writer, "{{\"execute\":\"{cmd}\"}}").map_err(|e| fail(&e))?;
-        let line = answer(cmd)?;
-        if cmd == command {
-            return Ok(line);
-        }
+        Err(fail(&"closed before the answer"))
     }
-    unreachable!("the loop returns at the command")
+
+    /// Runs `command` with `arguments` and returns its `return` line.
+    pub(crate) fn execute(
+        &mut self,
+        command: &str,
+        arguments: Option<&Value>,
+    ) -> Result<String, String> {
+        let mut msg = json!({ "execute": command });
+        if let Some(a) = arguments {
+            msg["arguments"] = a.clone();
+        }
+        writeln!(self.writer, "{msg}")
+            .map_err(|e| format!("QMP {} {command}: {e}", self.socket.display()))?;
+        self.answer(command)
+    }
+}
+
+/// Sends one QMP command (`stop`, `cont`, `query-status`) and returns its `return` line.
+pub(crate) fn qmp(socket: &Path, command: &str) -> Result<String, String> {
+    Qmp::connect(socket)?.execute(command, None)
 }
 
 /// The phone's own cgroup: the systemd scope `tools/phone-up.sh` named in `runs/<id>/scope`, if
@@ -121,18 +152,87 @@ pub(crate) fn pin(cgroup: Option<&Path>, pid: i32, cpus: &[usize]) -> Result<(),
     failed.map_or(Ok(()), |e| Err(format!("setting CPU affinity: {e}")))
 }
 
-/// One HTTP request to the phone's vphoned; `(status code, body)`.
+/// Reads one HTTP response to its end: `(status code, body)`. The body ends at its
+/// `Content-Length`, else at the end of the connection; a chunked body is decoded.
+pub(crate) fn read_response(mut s: impl Read) -> Result<(u16, Vec<u8>), String> {
+    let mut got = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    let mut head_end = None;
+    let mut want = None;
+    loop {
+        if head_end.is_none()
+            && let Some(end) = got.windows(4).position(|w| w == b"\r\n\r\n")
+        {
+            head_end = Some(end);
+            let head = String::from_utf8_lossy(&got[..end]).to_ascii_lowercase();
+            let chunked = head.contains("transfer-encoding: chunked");
+            want = head
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length:"))
+                .and_then(|n| n.trim().parse::<usize>().ok())
+                .filter(|_| !chunked);
+        }
+        if let (Some(end), Some(n)) = (head_end, want)
+            && got.len() >= end + 4 + n
+        {
+            got.truncate(end + 4 + n);
+            break;
+        }
+        match s.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => got.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    let end = head_end.ok_or_else(|| {
+        format!(
+            "no complete HTTP response head in {:?}",
+            String::from_utf8_lossy(&got)
+        )
+    })?;
+    let head = String::from_utf8_lossy(&got[..end]).into_owned();
+    let code = head
+        .split(' ')
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .ok_or_else(|| format!("no HTTP status in {head:?}"))?;
+    let body = got.split_off(end + 4);
+    let chunked = head
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked");
+    Ok((code, if chunked { dechunk(&body) } else { body }))
+}
+
+/// A chunked body's data; a truncated one gives what arrived.
+fn dechunk(mut raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    while let Some(eol) = raw.windows(2).position(|w| w == b"\r\n") {
+        let size = std::str::from_utf8(&raw[..eol])
+            .ok()
+            .and_then(|l| usize::from_str_radix(l.split(';').next().unwrap_or("").trim(), 16).ok());
+        let Some(size) = size.filter(|n| *n > 0) else {
+            break;
+        };
+        let data = &raw[eol + 2..];
+        out.extend_from_slice(&data[..size.min(data.len())]);
+        raw = data.get(size + 2..).unwrap_or_default();
+    }
+    out
+}
+
+/// One HTTP request to the phone's vphoned; `(status code, body)`. `timeout` bounds each read
+/// and write; `None` waits as long as vphoned takes (an app install can take minutes).
 pub(crate) fn vphoned(
     upstream: &Upstream,
     method: &str,
     path: &str,
     body: &str,
+    timeout: Option<Duration>,
 ) -> Result<(u16, String), String> {
     let mut s = upstream.connect().map_err(|e| e.to_string())?;
-    s.set_read_timeout(Some(CALL_TIMEOUT))
-        .map_err(|e| e.to_string())?;
-    s.set_write_timeout(Some(CALL_TIMEOUT))
-        .map_err(|e| e.to_string())?;
+    s.set_read_timeout(timeout).map_err(|e| e.to_string())?;
+    s.set_write_timeout(timeout).map_err(|e| e.to_string())?;
     // The write side stays open until the answer is read: vphoned requires it (tools/vphoned.sh).
     write!(
         s,
@@ -140,43 +240,44 @@ pub(crate) fn vphoned(
         body.len()
     )
     .map_err(|e| format!("vphoned {path}: {e}"))?;
-    let mut got = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        if let Some(end) = got.windows(4).position(|w| w == b"\r\n\r\n") {
-            let head = String::from_utf8_lossy(&got[..end]).to_ascii_lowercase();
-            let want = head
-                .lines()
-                .find_map(|l| l.strip_prefix("content-length:"))
-                .and_then(|n| n.trim().parse::<usize>().ok());
-            if want.is_some_and(|n| got.len() >= end + 4 + n) {
-                break;
-            }
-        }
-        match s.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => got.extend_from_slice(&chunk[..n]),
-            Err(e) => return Err(format!("vphoned {path}: {e}")),
-        }
-    }
-    let text = String::from_utf8_lossy(&got);
-    let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
-    let code = head
-        .split(' ')
-        .nth(1)
-        .and_then(|c| c.parse().ok())
-        .ok_or_else(|| format!("vphoned {path}: no HTTP status in {head:?}"))?;
-    Ok((code, body.to_owned()))
+    let (code, body) = read_response(&mut s).map_err(|e| format!("vphoned {path}: {e}"))?;
+    Ok((code, String::from_utf8_lossy(&body).into_owned()))
 }
 
 /// Whether vphoned answers `/v1/health` with `"status":"ok"`.
 pub(crate) fn healthy(upstream: &Upstream) -> bool {
-    matches!(vphoned(upstream, "GET", "/v1/health", ""), Ok((200, body)) if body.contains("\"status\":\"ok\""))
+    matches!(vphoned(upstream, "GET", "/v1/health", "", Some(CALL_TIMEOUT)), Ok((200, body)) if body.contains("\"status\":\"ok\""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn responses_by_length_by_close_and_chunked() {
+        let by_length = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nokEXTRA";
+        assert_eq!(
+            read_response(&by_length[..]).unwrap(),
+            (200, b"ok".to_vec())
+        );
+        let by_close = b"HTTP/1.1 404 Not Found\r\n\r\nnope";
+        assert_eq!(
+            read_response(&by_close[..]).unwrap(),
+            (404, b"nope".to_vec())
+        );
+        let chunked =
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\na;x=1\r\n0123456789\r\n0\r\n\r\n";
+        assert_eq!(
+            read_response(&chunked[..]).unwrap().1,
+            b"abc0123456789".to_vec()
+        );
+        assert_eq!(
+            dechunk(b"5\r\nab"),
+            b"ab".to_vec(),
+            "truncated: what arrived"
+        );
+        assert!(read_response(&b"HTTP/1.1 200"[..]).is_err());
+    }
 
     #[test]
     fn cpu_lists() {

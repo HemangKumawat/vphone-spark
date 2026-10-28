@@ -35,6 +35,10 @@ cpu_priority = true     # cpu.weight 1000 for the phone in use, 100 for the rest
 core_pinning = true     # the phone in use runs on the fast cores, the rest on all cores
 clock_resync = true     # after a wake, set the guest clock (vphoned time.clock): a pause stops it
 auto_restart = true     # restart a phone whose QEMU died or whose vphoned stopped answering
+batch = true            # POST /batch: one call fanned out to many phones
+events = true           # GET /events: every phone's /v1/events and the fleet's events on one WebSocket
+qmp_input = true        # POST /phones/<id>/input: tap, swipe, keys and text through QMP
+mcp = true              # vphone-fleet mcp: the fleet as tools for AI agents (MCP over stdio)
 
 # Each key is the run-vphone.sh environment variable of that name. A variable already set in the
 # caller's environment wins (GFX=0 tools/phone-up.sh A lite).

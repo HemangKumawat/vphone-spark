@@ -145,6 +145,14 @@ impl Head {
             .any(|(name, _)| name.eq_ignore_ascii_case("upgrade"))
     }
 
+    /// The first header named `name` (any case), if present.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+
     pub fn method(&self) -> &str {
         &self.method
     }

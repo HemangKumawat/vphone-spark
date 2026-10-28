@@ -189,6 +189,13 @@ The control API takes the same token check as a phone's API (`Authorization: Bea
 | `DELETE /phones/ID?confirm=ID` | delete |
 | `POST /goldens?dir=DIR[&name=NAME]` | golden add |
 | `GET /features`, `PUT /features/NAME {"on": false}` | [feature switches](#feature-switches) |
+| `ANY /phones/ID/v1/...` | that phone's vphoned API, token stripped, woken first if parked ([AUTOMATION.md](AUTOMATION.md)) |
+| `POST /batch`, `GET /events` | one call on many phones; one WebSocket of every phone's and the fleet's events |
+| `GET /phones/ID/screen`, `POST /phones/ID/input` | a PNG through QMP; tap, swipe, keys and text through QMP |
+| `GET /diag`, `GET /phones/ID/diag`, `GET /phones/ID/logs?tail=N` | every check with a hint per failure (`vphone-fleet doctor`), and log tails |
+
+Examples in curl and Python, the MCP server (`vphone-fleet mcp`) and the diagnosis flow:
+[AUTOMATION.md](AUTOMATION.md). Contract: [openapi.yaml](openapi.yaml).
 
 ### Mac vphone-cli templates vs vphone-fleet
 
@@ -332,6 +339,12 @@ switch.
 | `core_pinning` | on | the phone in use on the fast cores, the rest on every core | the phone in use is slower than unpinned |
 | `clock_resync` | on | sets the guest clock after a wake | `PUT /v1/clock` errors in the log, or the guest time jumps wrongly |
 | `auto_restart` | on | restarts a phone whose QEMU died or whose vphoned stopped answering | a phone restarts in a loop: turn it off to read its `runs/<id>/console.log` |
+| `batch` | on | `POST /batch`: one vphoned call on many phones, `max_awake` at a time | a script floods the phones, or waking many parked phones at once is too heavy |
+| `events` | on | `GET /events` and the watchers that hold one `/v1/events` connection per healthy phone | nobody listens and the per-phone connections cost too much |
+| `qmp_input` | on | `POST /phones/ID/input`: tap, swipe, keys and text through QMP | input lands in the wrong place, or only vphoned should touch the phones |
+| `mcp` | on | `vphone-fleet mcp`: the fleet as MCP tools for AI agents | no agent should drive the phones |
+
+A switched-off route answers 503 `{"error":"feature <name> is off","enable":"PUT /features/<name>"}`.
 
 The launcher's own switches are environment variables ([PERFORMANCE.md](PERFORMANCE.md)); a
 profile can set them too:

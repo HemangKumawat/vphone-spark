@@ -12,10 +12,11 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use vphone_api_proxy::{Upstream, json_string, log};
+use vphone_api_proxy::{Upstream, log};
 
 use crate::config::{Config, Feature, Paths, Source, Switch};
 use crate::host;
+use crate::journal::Journal;
 use crate::phone::{self, PhoneToml};
 
 pub(crate) use launch::{AfterWake, stop_phone};
@@ -72,6 +73,10 @@ struct Running {
     healthy: Option<bool>,
     /// The proxy's `runs/<id>/activity` time when last seen; a change is a use.
     activity: Option<SystemTime>,
+    /// Its exit is recorded: recorded once, not at every tick until it restarts.
+    exit_recorded: bool,
+    /// Its failing health is recorded, once until it answers again.
+    unhealthy_recorded: bool,
 }
 
 /// Every phone this process manages, and how it treats them.
@@ -86,6 +91,8 @@ pub(crate) struct Fleet {
     /// The cores an active phone gets (empty: no pinning), and all of them.
     pub(crate) fast: Vec<usize>,
     pub(crate) all: Vec<usize>,
+    /// Starts, stops, parks, wakes and failures, for `/diag` and `/events`.
+    pub(crate) journal: Journal,
     phones: BTreeMap<String, Running>,
 }
 
@@ -104,6 +111,7 @@ impl Fleet {
                 .map_or_else(|| PathBuf::from("/tmp/vphone-vsock"), PathBuf::from),
             fast: Vec::new(),
             all,
+            journal: Journal::default(),
             phones: BTreeMap::new(),
         }
     }
@@ -136,6 +144,8 @@ impl Fleet {
                 last_check: 0,
                 healthy: None,
                 activity: None,
+                exit_recorded: false,
+                unhealthy_recorded: false,
             },
         );
     }
@@ -159,9 +169,12 @@ impl Fleet {
             self.adopt();
             return Ok(format!("phone {id} already runs (pid {pid}, adopted)"));
         }
-        let (child, cid) = launch(&self.paths, &self.vsock_dir, id)?;
+        let (child, cid) = launch(&self.paths, &self.vsock_dir, id)
+            .inspect_err(|e| self.journal.record(id, "phone.start_failed", e))?;
         let pid = i32::try_from(child.id()).map_err(|e| e.to_string())?;
         self.track(id, pid, Some(child), cid, Power::Active);
+        self.journal
+            .record(id, "phone.started", &format!("pid {pid}"));
         Ok(format!("phone {id} started (pid {pid})"))
     }
 
@@ -253,7 +266,8 @@ impl Fleet {
         if p.power == Power::Parked {
             return Ok(format!("phone {id} is already parked"));
         }
-        host::qmp(&self.paths.run(id).join("qmp.sock"), "stop")?;
+        host::qmp(&self.paths.run(id).join("qmp.sock"), "stop")
+            .inspect_err(|e| self.journal.record(id, "phone.park_failed", e))?;
         self.set_power(id, Power::Parked);
         let cgroup = self.phones.get(id).and_then(|p| p.cgroup.clone());
         if self.on(Feature::MemoryReclaim)
@@ -274,7 +288,8 @@ impl Fleet {
                 );
             });
         }
-        log!("[fleet] parked {id}");
+        self.journal
+            .record(id, "phone.parked", "idle, or past max_awake");
         Ok(format!("phone {id} parked"))
     }
 
@@ -293,16 +308,18 @@ impl Fleet {
             }
             return Ok(None);
         }
-        host::qmp(&self.paths.run(id).join("qmp.sock"), "cont")?;
         p.last_ok = now;
         let cid = p.cid;
+        host::qmp(&self.paths.run(id).join("qmp.sock"), "cont")
+            .inspect_err(|e| self.journal.record(id, "phone.wake_failed", e))?;
         self.set_power(id, Power::Active);
-        log!("[fleet] woke {id}");
+        self.journal.record(id, "phone.woken", "used while parked");
         Ok(Some(AfterWake {
             id: id.to_owned(),
             upstream: self.upstream(cid),
             wait: Duration::from_secs(self.config.tunables.wake_secs),
             clock_resync: self.on(Feature::ClockResync),
+            journal: self.journal.clone(),
         }))
     }
 
@@ -358,12 +375,30 @@ impl Fleet {
                 continue;
             };
             if !Self::alive(p) {
+                let pid = p.pid;
+                if !p.exit_recorded {
+                    p.exit_recorded = true;
+                    self.journal.record(
+                        id,
+                        "phone.exited",
+                        &format!(
+                            "QEMU (pid {pid}) exited; its last words are in GET /phones/{id}/logs"
+                        ),
+                    );
+                }
+                let Some(p) = self.phones.get(id) else {
+                    continue;
+                };
                 if self.config.features.on(Feature::AutoRestart)
                     && now >= p.started + RESTART_BACKOFF
                 {
-                    log!("[fleet] {id} (pid {}) exited: restarting", p.pid);
-                    if let Err(e) = self.start(id) {
-                        log!("[fleet] restarting {id}: {e}");
+                    match self.start(id) {
+                        Ok(_) => self.journal.record(
+                            id,
+                            "phone.restarted",
+                            &format!("QEMU (pid {pid}) exited (auto_restart)"),
+                        ),
+                        Err(e) => self.journal.record(id, "phone.restart_failed", &e),
                     }
                 }
                 continue;
@@ -399,12 +434,9 @@ impl Fleet {
             if power == Power::Active && quiet >= t.idle_secs {
                 self.set_power(id, Power::Idle);
             }
-            if self.on(Feature::Parking)
-                && power != Power::Parked
-                && quiet >= t.park_secs
-                && let Err(e) = self.park(id)
-            {
-                log!("[fleet] {e}");
+            if self.on(Feature::Parking) && power != Power::Parked && quiet >= t.park_secs {
+                // A failure is in the journal (phone.park_failed).
+                let _ = self.park(id);
             }
         }
         while self.on(Feature::Parking) {
@@ -424,81 +456,14 @@ impl Fleet {
             else {
                 break;
             };
-            if let Err(e) = self.park(&lru) {
-                log!("[fleet] parking {lru}, the least recently used: {e}");
+            if self.park(&lru).is_err() {
                 break;
             }
         }
     }
-
-    /// Running, unparked phones whose health check is due: `(id, upstream)`.
-    pub(crate) fn due_checks(&mut self) -> Vec<(String, Upstream)> {
-        let now = (self.clock)();
-        let vsock = self.vsock_dir.clone();
-        self.phones
-            .iter_mut()
-            .filter(|(_, p)| p.power != Power::Parked && now >= p.last_check + HEALTH_EVERY)
-            .map(|(id, p)| {
-                p.last_check = now;
-                (id.clone(), Upstream::new(p.cid, &vsock))
-            })
-            .collect()
-    }
-
-    /// Records health results; returns the phones to restart (unhealthy past their boot window).
-    pub(crate) fn record_health(&mut self, results: &[(String, bool)]) -> Vec<String> {
-        let now = (self.clock)();
-        let t = &self.config.tunables;
-        let restart = self.config.features.on(Feature::AutoRestart);
-        let mut out = Vec::new();
-        for (id, ok) in results {
-            let Some(p) = self.phones.get_mut(id) else {
-                continue;
-            };
-            if p.power == Power::Parked {
-                continue;
-            }
-            p.healthy = Some(*ok);
-            if *ok {
-                p.last_ok = now;
-            } else if restart
-                && now >= p.started + t.boot_secs
-                && now >= p.last_ok + t.unhealthy_secs
-            {
-                out.push(id.clone());
-            }
-        }
-        out
-    }
-
-    /// Every phone folder with its run-time state, as JSON objects.
-    pub(crate) fn list_json(&self) -> Vec<String> {
-        let now = (self.clock)();
-        phone::list(&self.paths)
-            .iter()
-            .map(|t| {
-                let (state, pid, healthy, used) = match self.phones.get(&t.id) {
-                    Some(p) => (
-                        p.power.name(),
-                        p.pid.to_string(),
-                        p.healthy.map_or("null".to_owned(), |h| h.to_string()),
-                        now.saturating_sub(p.last_used).to_string(),
-                    ),
-                    None => ("stopped", "null".into(), "null".into(), "null".into()),
-                };
-                format!(
-                    "{{\"id\":{},\"state\":\"{state}\",\"pid\":{pid},\"healthy\":{healthy},\"last_used_secs_ago\":{used},\"cid\":{},\"api_port\":{},\"golden\":{},\"profile\":{}}}",
-                    json_string(&t.id),
-                    t.cid,
-                    t.api_port,
-                    json_string(&t.golden),
-                    t.profile.as_deref().map_or("null".to_owned(), json_string)
-                )
-            })
-            .collect()
-    }
 }
 
 mod launch;
+mod status;
 #[cfg(test)]
 mod tests;

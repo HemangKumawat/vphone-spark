@@ -1,21 +1,35 @@
 //! vphone-fleet: makes, runs, parks and snapshots the phones of one host (docs/DENSITY.md).
 
 mod api;
+mod client;
 mod config;
+mod diag;
+mod events;
 mod fleet;
+mod gateway;
 mod host;
+mod journal;
+mod mcp;
 mod phone;
+mod screen;
+mod server;
+#[cfg(test)]
+mod tests;
+mod ws;
 
 use std::env;
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde_json::Value;
 use vphone_api_proxy::log;
 
-use crate::config::{Config, Paths};
+use crate::client::Client;
+use crate::config::{Config, Feature, Paths};
 use crate::fleet::{Fleet, stop_phone};
 use crate::phone::CreateSpec;
 
@@ -38,13 +52,20 @@ usage: vphone-fleet COMMAND
   features                       the feature switches, each with its value and source
   serve [--listen HOST:PORT]     the control API (default 127.0.0.1:8760) and the 1 s loop:
                                  health, auto-restart, parking, CPU priority
+  doctor [ID] [--logs]           every check with a hint per failure (a running serve's /diag,
+                                 else checked from here); --logs adds each phone's log tails
+  mcp                            the fleet as MCP tools for AI agents, on stdin/stdout (talks
+                                 to the running serve: VPHONE_FLEET_URL, VPHONE_FLEET_TOKEN)
 
 FLEET (default <checkout>/vms) holds golden/ and phones/; runs/ holds run-time files. The control
 API's token is VPHONE_FLEET_TOKEN, else a new one written to runs/fleet-token (mode 0600).
+The API, with examples: docs/AUTOMATION.md and docs/openapi.yaml.
 Feature switches: config/profiles.toml [features] < VPHONE_FEATURE_<NAME>=0|1 < PUT /features/<name>.";
 
 /// The default control API address: loopback, next to vphone-cli's 8765 example port.
 const LISTEN: &str = "127.0.0.1:8760";
+/// Lines of each log `doctor --logs` prints.
+const DOCTOR_TAIL: usize = 40;
 
 fn say(line: &str) {
     // stdout may be a closed pipe (`list | head`): not worth a panic.
@@ -133,7 +154,26 @@ fn run(args: &[String]) -> Result<bool, String> {
             Ok(true)
         }
         "serve" => {
-            api::serve(&paths, config, opt(&opts, "--listen").unwrap_or(LISTEN)).map(|()| true)
+            server::serve(&paths, config, opt(&opts, "--listen").unwrap_or(LISTEN)).map(|()| true)
+        }
+        "doctor" => Ok(doctor(
+            &paths,
+            config,
+            pos.first().copied(),
+            flag(&opts, "--logs").then_some(DOCTOR_TAIL),
+        )),
+        "mcp" => {
+            let client = Client::find(&paths, LISTEN);
+            // A running serve's live switch (PUT /features/mcp) wins over the file's.
+            let live = client
+                .json("GET", "/features", "")
+                .ok()
+                .and_then(|(_, b)| serde_json::from_str::<Value>(&b).ok())
+                .and_then(|v| v["mcp"]["on"].as_bool());
+            if !live.unwrap_or(config.features.on(Feature::Mcp)) {
+                return Err("feature mcp is off: PUT /features/mcp {\"on\": true}, or mcp = true in config/profiles.toml [features]".to_owned());
+            }
+            mcp::run(io::stdin().lock(), io::stdout().lock(), &client).map(|()| true)
         }
         other => Err(format!("unknown command {other}\n\n{USAGE}")),
     }
@@ -216,6 +256,46 @@ fn phones(
     } else {
         ok
     })
+}
+
+/// `vphone-fleet doctor`: the running serve's report, else one made here (without the serve's
+/// restart counts and failure history), with the last `tail` lines of each log if asked;
+/// whether nothing failed.
+fn doctor(paths: &Paths, config: Config, id: Option<&str>, tail: Option<usize>) -> bool {
+    let path = id.map_or_else(|| "/diag".to_owned(), |id| format!("/phones/{id}/diag"));
+    let from_serve = Client::find(paths, LISTEN)
+        .json("GET", &path, "")
+        .and_then(|(code, body)| {
+            serde_json::from_str::<Value>(&body).map_err(|e| format!("{path}: {code}: {e}"))
+        });
+    let report = from_serve.unwrap_or_else(|e| {
+        say(&format!(
+            "(no answer from vphone-fleet serve: {e}; checking from here)"
+        ));
+        let mut fleet = Fleet::new(paths.clone(), config);
+        fleet.adopt();
+        let fleet = Mutex::new(fleet);
+        id.map_or_else(|| diag::report(&fleet), |id| diag::phone_report(&fleet, id))
+    });
+    let ok = diag::print(&report, say);
+    if let Some(tail) = tail {
+        let ids: Vec<String> = id.map_or_else(
+            || phone::list(paths).into_iter().map(|p| p.id).collect(),
+            |id| vec![id.to_owned()],
+        );
+        for id in ids {
+            match diag::logs(paths, &id, tail) {
+                Ok(v) => {
+                    for f in v["files"].as_array().into_iter().flatten() {
+                        say(&format!("--- {id} {}", f["file"].as_str().unwrap_or("?")));
+                        say(f["text"].as_str().or(f["error"].as_str()).unwrap_or(""));
+                    }
+                }
+                Err(e) => say(&format!("--- {id}: {e}")),
+            }
+        }
+    }
+    ok
 }
 
 /// Waits up to `boot_secs` for each phone's `/v1/health`; prints each outcome.

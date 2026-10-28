@@ -13,6 +13,7 @@ use vphone_api_proxy::{Token, Upstream, log};
 
 use crate::config::Paths;
 use crate::host;
+use crate::journal::Journal;
 use crate::phone::{self, PhoneToml};
 
 /// How long a stopped phone gets to exit after SIGTERM before SIGKILL; `tools/boot-test.sh`
@@ -146,6 +147,7 @@ pub(crate) struct AfterWake {
     pub(super) upstream: Upstream,
     pub(super) wait: Duration,
     pub(super) clock_resync: bool,
+    pub(super) journal: Journal,
 }
 
 impl AfterWake {
@@ -155,10 +157,12 @@ impl AfterWake {
         let deadline = Instant::now() + self.wait;
         while !host::healthy(&self.upstream) {
             if Instant::now() >= deadline {
-                return Err(format!(
-                    "{} woke but /v1/health did not answer within {:?}",
+                let e = format!(
+                    "{} woke but /v1/health did not answer within {:?} ([fleet] wake_secs)",
                     self.id, self.wait
-                ));
+                );
+                self.journal.record(&self.id, "phone.wake_failed", &e);
+                return Err(e);
             }
             thread::sleep(Duration::from_millis(250));
         }
@@ -166,7 +170,13 @@ impl AfterWake {
             return Ok(format!("{} awake", self.id));
         }
         let body = format!("{{\"time\":{:.3}}}", unix_now());
-        match host::vphoned(&self.upstream, "PUT", "/v1/clock", &body) {
+        match host::vphoned(
+            &self.upstream,
+            "PUT",
+            "/v1/clock",
+            &body,
+            Some(host::CALL_TIMEOUT),
+        ) {
             Ok((200, answer)) => Ok(format!("{} awake, clock: {}", self.id, answer.trim())),
             Ok((code, answer)) => Err(format!(
                 "{} awake, clock not set: {code} {}",

@@ -2,8 +2,6 @@
 
 use std::cell::Cell;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixListener;
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -23,36 +21,6 @@ fn at(t: u64) {
     NOW.with(|n| n.set(t));
 }
 
-/// A QMP server recording each command but `qmp_capabilities`.
-fn fake_qmp(socket: &Path) -> Arc<Mutex<Vec<String>>> {
-    let log = Arc::new(Mutex::new(Vec::new()));
-    let listener = UnixListener::bind(socket).unwrap();
-    let seen = Arc::clone(&log);
-    thread::spawn(move || {
-        for conn in listener.incoming() {
-            let mut conn = conn.unwrap();
-            conn.write_all(b"{\"QMP\": {\"version\": {}}}\n").unwrap();
-            let lines = BufReader::new(conn.try_clone().unwrap()).lines();
-            for line in lines {
-                let line = line.unwrap();
-                let cmd = line.split('"').nth(3).unwrap_or_default().to_owned();
-                let answer = if cmd == "query-status" {
-                    "{\"return\": {\"status\": \"running\", \"running\": true}}\n"
-                } else {
-                    "{\"return\": {}}\n"
-                };
-                if cmd != "qmp_capabilities" {
-                    seen.lock().unwrap().push(cmd);
-                }
-                if conn.write_all(answer.as_bytes()).is_err() {
-                    break;
-                }
-            }
-        }
-    });
-    log
-}
-
 struct Phone {
     qmp: Arc<Mutex<Vec<String>>>,
     cgroup: PathBuf,
@@ -64,7 +32,7 @@ impl Phone {
     }
 
     fn commands(&self) -> Vec<String> {
-        self.qmp.lock().unwrap().clone()
+        crate::tests::names(&self.qmp)
     }
 }
 
@@ -98,7 +66,7 @@ fn phone(f: &mut Fleet, id: &str) -> Phone {
     let run = f.paths.run(id);
     fs::create_dir_all(&run).unwrap();
     fs::write(run.join("pid"), std::process::id().to_string()).unwrap();
-    let qmp = fake_qmp(&run.join("qmp.sock"));
+    let qmp = crate::tests::fake_qmp(&run.join("qmp.sock"));
     let cgroup = f.paths.root.join(format!("cgroup-{id}"));
     fs::create_dir_all(&cgroup).unwrap();
     f.track(

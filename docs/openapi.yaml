@@ -1,0 +1,513 @@
+openapi: 3.1.0
+info:
+  title: vphone-fleet control API
+  version: 0.1.0
+  summary: One authenticated address for every phone of one host.
+  description: |
+    Served by `vphone-fleet serve` (default `127.0.0.1:8760`; any other address is logged as a
+    warning). Guide with curl and Python examples: docs/AUTOMATION.md.
+
+    Every route needs the token (`VPHONE_FLEET_TOKEN`, else `runs/fleet-token`). The fleet strips it
+    before anything reaches a phone. A request with an `Origin` header (a web page) is refused
+    with 403, as vphoned refuses one.
+
+    `/phones/{id}/v1/...` is each phone's own vphoned API (vphone-cli's
+    `Research/vphoned_http_api.md`), unchanged. The fleet sends it `Host: localhost` and never sends
+    the token or an `Origin`. A call to a parked phone wakes it first.
+
+    A route whose feature switch is off answers 503 with `FeatureOff`. The token check is never a
+    switch.
+
+    Status: untested on Spark and against a real guest. It was checked against fake vphoneds and a
+    fake QMP.
+servers:
+  - url: http://127.0.0.1:8760
+security:
+  - bearer: []
+  - query: []
+tags:
+  - name: phones
+  - name: gateway
+  - name: automation
+  - name: diagnosis
+  - name: features
+
+paths:
+  /phones:
+    get:
+      tags: [phones]
+      summary: Every phone with its state
+      responses:
+        "200":
+          description: One entry per phone
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Phone" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [phones]
+      summary: Create phones as reflinks of a golden
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: string }, example: "p01,p02" }
+        - { name: from, in: query, required: true, schema: { type: string }, description: golden name }
+        - { name: profile, in: query, schema: { type: string }, description: "a [profile.NAME] of config/profiles.toml" }
+      responses:
+        "200": { $ref: "#/components/responses/Bulk" }
+        "207": { $ref: "#/components/responses/Bulk" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /phones/{verb}:
+    post:
+      tags: [phones]
+      summary: Start or stop many phones (default every phone)
+      parameters:
+        - { name: verb, in: path, required: true, schema: { type: string, enum: [start, stop] } }
+        - { name: ids, in: query, schema: { type: string }, example: "p01,p02" }
+      responses:
+        "200": { $ref: "#/components/responses/Bulk" }
+        "207": { $ref: "#/components/responses/Bulk" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /phones/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [phones]
+      summary: One phone, with its own API token
+      responses:
+        "200":
+          description: The phone
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Phone"
+                  - type: object
+                    properties:
+                      api_token: { type: [string, "null"] }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [phones]
+      summary: Delete a stopped phone
+      parameters:
+        - { name: confirm, in: query, required: true, schema: { type: string }, description: the id again }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /phones/{id}/{action}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [phones]
+      summary: One phone's lifecycle step
+      description: |
+        `wake` answers after `/v1/health`. `snapshots` and `restore` take `name`, and `reset` takes
+        `confirm`. They work only while the phone is stopped.
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [start, stop, park, wake, snapshots, restore, reset] }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: confirm, in: query, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /phones/{id}/v1/{path}:
+    $ref: "#/components/pathItems/gateway"
+
+  /batch:
+    post:
+      tags: [automation]
+      summary: One vphoned call on many phones
+      description: |
+        At most `max_awake` phones at a time, so `"all"` never wakes more phones at once than may run.
+        `"all"` means every running phone. The answer is 200 when every call succeeded and 207 when
+        any failed. Feature switch `batch`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phones, path]
+              properties:
+                phones:
+                  oneOf:
+                    - { type: array, items: { type: string } }
+                    - { const: all }
+                method: { type: string, pattern: "^[A-Z]+$", default: GET }
+                path: { type: string, pattern: "^/v1/\\S*$", example: /v1/rpc }
+                body: { description: "sent as JSON to each phone" }
+                timeout_secs: { type: integer, minimum: 1 }
+            example: { phones: all, method: POST, path: /v1/rpc, body: { method: apps.list } }
+      responses:
+        "200": { $ref: "#/components/responses/BatchResults" }
+        "207": { $ref: "#/components/responses/BatchResults" }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/FeatureOff" }
+
+  /events:
+    get:
+      tags: [automation]
+      summary: Every phone's events and the fleet's, on one WebSocket
+      description: |
+        A WebSocket (RFC 6455). The token may come as the subprotocol `vphone-token.<token>`. The
+        first message is `{"event":"connected","phones":[...]}`. After that, each phone's own
+        `/v1/events` messages arrive with `phone` and `source: "phone"` added. Fleet events arrive as
+        `FleetEvent`. The server pings every 15 s when nothing happens. Feature switch `events`.
+      parameters:
+        - { name: Upgrade, in: header, required: true, schema: { const: websocket } }
+        - { name: Sec-WebSocket-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "101":
+          description: |
+            Switched to WebSocket. Text messages are `FleetEvent`, or a phone's event as
+            `{type, event, data, phone, source: "phone"}`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FleetEvent" }
+        "426": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/FeatureOff" }
+
+  /phones/{id}/screen:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [automation]
+      summary: A screenshot
+      description: |
+        A PNG from QMP `screendump`. If that fails, a JPEG from vphoned's `screen.screenshot`.
+        `X-Screen-Source` says which (`qmp` or `vphoned`). A parked phone is woken first.
+      responses:
+        "200":
+          description: The image
+          headers:
+            X-Screen-Source: { schema: { type: string, enum: [qmp, vphoned] } }
+          content:
+            image/png: { schema: { type: string, contentMediaType: image/png } }
+            image/jpeg: { schema: { type: string, contentMediaType: image/jpeg } }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+
+  /phones/{id}/input:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [automation]
+      summary: Tap, swipe, home, keys or text through QMP input-send-event
+      description: |
+        Coordinates are screen pixels (1290 x 2796). They are scaled to QEMU's absolute axes
+        (0-32767). `home` is the middle button. `key` takes QEMU qcodes, and `text` types a US
+        layout. The answer lists the QMP commands sent. Feature switch `qmp_input`. Untested on
+        Spark: checked against a fake QMP only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [action, x, y]
+                  properties: { action: { const: tap }, x: { type: integer }, y: { type: integer } }
+                - type: object
+                  required: [action, x0, y0, x1, y1]
+                  properties:
+                    action: { const: swipe }
+                    x0: { type: integer }
+                    y0: { type: integer }
+                    x1: { type: integer }
+                    y1: { type: integer }
+                    ms: { type: integer, default: 300 }
+                    steps: { type: integer, minimum: 1, maximum: 1000, default: 20 }
+                - type: object
+                  required: [action]
+                  properties: { action: { const: home } }
+                - type: object
+                  required: [action, keys]
+                  properties:
+                    action: { const: key }
+                    keys: { type: array, items: { type: string }, example: [ret] }
+                - type: object
+                  required: [action, text]
+                  properties: { action: { const: text }, text: { type: string } }
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { const: true }
+                  phone: { type: string }
+                  qmp: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/FeatureOff" }
+
+  /diag:
+    get:
+      tags: [diagnosis]
+      summary: Every host and phone check, each failure with a hint
+      responses:
+        "200":
+          description: The report (also printed by `vphone-fleet doctor`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  host: { type: array, items: { $ref: "#/components/schemas/Check" } }
+                  phones: { type: array, items: { $ref: "#/components/schemas/PhoneReport" } }
+                  failures: { type: array, items: { $ref: "#/components/schemas/FleetEvent" } }
+                  features: { $ref: "#/components/schemas/Features" }
+
+  /phones/{id}/diag:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [diagnosis]
+      summary: One phone's checks and facts
+      responses:
+        "200":
+          description: The phone's report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PhoneReport" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /phones/{id}/logs:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [diagnosis]
+      summary: The last lines of each of the phone's run logs
+      parameters:
+        - { name: tail, in: query, schema: { type: integer, default: 200 } }
+      responses:
+        "200":
+          description: One entry per `*.log` in `runs/<id>/` and one level down
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone: { type: string }
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        file: { type: string }
+                        text: { type: string }
+                        error: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /goldens:
+    post:
+      tags: [phones]
+      summary: Add a stopped VM as a read-only golden
+      parameters:
+        - { name: dir, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /features:
+    get:
+      tags: [features]
+      summary: Each feature switch with its value and source
+      responses:
+        "200":
+          description: The switches
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Features" }
+
+  /features/{name}:
+    put:
+      tags: [features]
+      summary: Turn one switch on or off, live (not written to the file)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [parking, memory_reclaim, cpu_priority, core_pinning, clock_resync, auto_restart, batch, events, qmp_input, mcp]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [on]
+              properties: { on: { type: boolean } }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+    query: { type: apiKey, in: query, name: token }
+
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string }, example: p01 }
+
+  pathItems:
+    gateway:
+      summary: The phone's own vphoned API
+      description: |
+        Forwarded byte for byte (bodies and WebSockets) to the phone's vphoned as `/v1/{path}`, with
+        `Host: localhost` and without the token. Any method is forwarded. A parked phone is woken
+        first. `/v1/host/screen` answers 501: use `GET /phones/{id}/screen`.
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+        - { name: path, in: path, required: true, schema: { type: string }, description: "the rest of the vphoned path, e.g. health or rpc" }
+      get: &forwarded
+        tags: [gateway]
+        responses:
+          "default": { description: "vphoned's answer (vphone-cli Research/vphoned_http_api.md)" }
+          "401": { $ref: "#/components/responses/Unauthorized" }
+          "403": { $ref: "#/components/responses/Error" }
+          "409": { $ref: "#/components/responses/Error" }
+          "501": { $ref: "#/components/responses/Error" }
+          "502": { $ref: "#/components/responses/Error" }
+          "504": { $ref: "#/components/responses/Error" }
+      post: *forwarded
+      put: *forwarded
+      delete: *forwarded
+
+  responses:
+    Ok:
+      description: Done
+      content:
+        application/json:
+          schema:
+            type: object
+            properties: { ok: { const: true }, message: { type: string } }
+    Error:
+      description: Refused, with what to do
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: No token or a wrong one
+      content:
+        text/plain: { schema: { type: string } }
+    FeatureOff:
+      description: The route's feature switch is off
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FeatureOff" }
+    Bulk:
+      description: One result per phone (207 when any failed)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              results:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    ok: { type: boolean }
+                    message: { type: string }
+                    error: { type: string }
+    BatchResults:
+      description: One result per phone (207 when any failed)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              results:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    phone: { type: string }
+                    ok: { type: boolean }
+                    status: { type: integer }
+                    body: { description: "vphoned's answer, parsed as JSON when it is JSON" }
+                    error: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: string } }
+    FeatureOff:
+      type: object
+      required: [error, enable]
+      properties:
+        error: { type: string, example: feature batch is off }
+        enable: { type: string, example: PUT /features/batch }
+    Phone:
+      type: object
+      properties:
+        id: { type: string }
+        state: { type: string, enum: [active, idle, parked, stopped] }
+        pid: { type: [integer, "null"] }
+        healthy: { type: [boolean, "null"] }
+        last_used_secs_ago: { type: [integer, "null"] }
+        cid: { type: integer }
+        api_port: { type: integer }
+        golden: { type: [string, "null"] }
+        profile: { type: [string, "null"] }
+    Check:
+      type: object
+      required: [check, status]
+      properties:
+        check: { type: string }
+        status: { type: string, enum: [ok, fail, note, skipped] }
+        detail: { type: string }
+        hint: { type: string, description: "on a failure: what to do, in plain words" }
+    PhoneReport:
+      type: object
+      properties:
+        phone: { type: string }
+        ok: { type: boolean }
+        checks: { type: array, items: { $ref: "#/components/schemas/Check" } }
+        facts:
+          type: object
+          description: pid, state, healthy, uptime, CPU %, RSS, PSS, CPUs, cgroup, disk (allocated, shared, own bytes), golden, profile, restarts, last_error
+    FleetEvent:
+      type: object
+      required: [event]
+      properties:
+        type: { const: event }
+        failure: { type: boolean, description: "a failure: also kept in /diag failures and the phone's last_error" }
+        time: { type: integer, description: Unix seconds }
+        source: { type: string, enum: [fleet, phone] }
+        phone: { type: string }
+        event:
+          type: string
+          examples:
+            - phone.started
+            - phone.stopped
+            - phone.unhealthy
+            - phone.restarted
+            - phone.parked
+            - phone.woken
+            - phone.start_failed
+            - phone.exited
+            - phone.restart_failed
+            - phone.park_failed
+            - phone.wake_failed
+            - phone.events_lost (stream only, not kept in failures)
+        reason: { type: string }
+    Features:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          on: { type: boolean }
+          source: { type: string, enum: [default, profiles.toml, env, api (not persisted)] }

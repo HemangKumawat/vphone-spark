@@ -109,16 +109,24 @@ pub(crate) enum Feature {
     ClockResync,
     AutoRestart,
     CorePinning,
+    Batch,
+    Events,
+    QmpInput,
+    Mcp,
 }
 
 impl Feature {
-    pub(crate) const ALL: [Self; 6] = [
+    pub(crate) const ALL: [Self; 10] = [
         Self::Parking,
         Self::MemoryReclaim,
         Self::CpuPriority,
         Self::ClockResync,
         Self::AutoRestart,
         Self::CorePinning,
+        Self::Batch,
+        Self::Events,
+        Self::QmpInput,
+        Self::Mcp,
     ];
 
     pub(crate) fn name(self) -> &'static str {
@@ -129,6 +137,10 @@ impl Feature {
             Self::ClockResync => "clock_resync",
             Self::AutoRestart => "auto_restart",
             Self::CorePinning => "core_pinning",
+            Self::Batch => "batch",
+            Self::Events => "events",
+            Self::QmpInput => "qmp_input",
+            Self::Mcp => "mcp",
         }
     }
 
@@ -186,7 +198,7 @@ impl Source {
 
 /// Every feature's value and where it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Features([(Switch, Source); 6]);
+pub(crate) struct Features([(Switch, Source); Feature::ALL.len()]);
 
 impl Default for Features {
     fn default() -> Self {

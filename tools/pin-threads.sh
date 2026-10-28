@@ -10,7 +10,10 @@
 # cores by cpu_capacity: there the vCPUs take the first 8 fastest cores, GPU threads the other
 # fastest ones (the slower cores when there are none), everything else the slower cores.
 # SYSFS (default /sys) points the detection at another tree.
-P=${1:?usage: pin-threads.sh PID [show]}
+# pin-threads.sh --fast-cpus prints the cores run-vphone.sh keeps QEMU on by default (Intel
+# hybrid: devices/cpu_core/cpus; else the fast tier below), empty on a uniform host. vphone-fleet
+# gives them to the phone in use.
+P=${1:?usage: pin-threads.sh PID [show] | pin-threads.sh --fast-cpus}
 SYSFS=${SYSFS:-/sys}
 # "<fast cpus> <slow cpus>" as taskset lists. Cores of one type can differ slightly (GB10's X925s
 # top out at 3.9-4.0 GHz), so the tiers split halfway between the fastest and slowest capacity, and
@@ -20,6 +23,10 @@ read -r fast slow < <(grep -H . "$SYSFS"/devices/system/cpu/cpu[0-9]*/cpu_capaci
   sed -E 's#.*/cpu([0-9]+)/cpu_capacity:#\1 #' | sort -n |
   awk '{n[NR]=$1; c[NR]=$2+0; if (c[NR]>m) m=c[NR]; if (NR==1 || c[NR]<l) l=c[NR]}
        END{if (l*10 >= m*9) exit; for (i=1;i<=NR;i++) if (c[i]*2 >= m+l) f=f (f?",":"") n[i]; else s=s (s?",":"") n[i]; print f, s}')
+if [ "$P" = --fast-cpus ]; then
+  if [ -r "$SYSFS/devices/cpu_core/cpus" ]; then cat "$SYSFS/devices/cpu_core/cpus"; else echo "${slow:+$fast}"; fi
+  exit 0
+fi
 if [ -n "$slow" ]; then
   IFS=, read -r -a F <<< "$fast"
   VCPU_CORES=${VCPU_CORES:-${F[*]:0:8}}

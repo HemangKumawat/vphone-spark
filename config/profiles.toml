@@ -14,6 +14,28 @@
 # manager when it makes a phone. Untested on Spark.
 rotate_ecid = false
 
+[fleet]
+# fleet/vphone-fleet's parking loop (docs/DENSITY.md, "Parking and memory"). Untested on Spark.
+idle_secs = 60          # no call for this long: the phone drops to normal CPU priority, all cores
+park_secs = 300         # no call for this long: the phone is paused (QMP stop) and uses no CPU
+max_awake = 8           # more running than this: the least recently used one is parked
+reclaim_on_park = "3G"  # written to a parked phone's memory.reclaim (feature memory_reclaim)
+fast_cpus = "auto"      # the cores an active phone gets: auto = tools/pin-threads.sh --fast-cpus, or a list "0-9"
+boot_secs = 300         # a starting phone's grace before failed health checks count
+unhealthy_secs = 120    # failed /v1/health this long: restart (feature auto_restart)
+wake_secs = 30          # how long a wake waits for /v1/health
+api_port_base = 8765    # the first host port a new phone's API (vphone-api-proxy) takes
+
+[features]
+# One switch per vphone-fleet behaviour, to turn off one that misbehaves. Overridden by the
+# environment (VPHONE_FEATURE_PARKING=0) and, live and not persisted, by PUT /features/<name>.
+parking = true          # park idle phones (QMP stop), wake them on use (QMP cont)
+memory_reclaim = false  # reclaim a parked phone's memory into zswap: needs zswap and swap first
+cpu_priority = true     # cpu.weight 1000 for the phone in use, 100 for the rest
+core_pinning = true     # the phone in use runs on the fast cores, the rest on all cores
+clock_resync = true     # after a wake, set the guest clock (vphoned time.clock): a pause stops it
+auto_restart = true     # restart a phone whose QEMU died or whose vphoned stopped answering
+
 # Each key is the run-vphone.sh environment variable of that name. A variable already set in the
 # caller's environment wins (GFX=0 tools/phone-up.sh A lite).
 [profile.full]

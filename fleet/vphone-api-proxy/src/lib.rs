@@ -20,6 +20,19 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub use head::{Head, admit, read_head};
+
+/// Writes one line to stderr and ignores a failed write.
+///
+/// `eprintln!` panics when stderr is a closed pipe, and the release profile aborts on panic, so
+/// one log line after a reader went away would end a phone's API (or the fleet manager). Every
+/// long-running path in these binaries logs through this instead.
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {{
+        use ::std::io::Write as _;
+        let _ = ::std::writeln!(::std::io::stderr(), $($arg)*);
+    }};
+}
 pub use upstream::Upstream;
 
 /// The guest vsock port vphoned listens on.
@@ -157,7 +170,8 @@ impl fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
-fn json_string(s: &str) -> String {
+/// `s` as a JSON string literal, quotes included.
+pub fn json_string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
         match c {

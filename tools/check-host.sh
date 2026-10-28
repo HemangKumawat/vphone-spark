@@ -35,6 +35,21 @@ else warn "vulkaninfo not installed (package vulkan-tools); can't check the GPU"
   || warn "/dev/vhost-vsock missing or not read/write for you (sudo modprobe vhost_vsock; see docs/SETUP.md)"
 m=$(cat /proc/sys/vm/max_map_count)
 [ "$m" -ge 1048576 ] && pass "vm.max_map_count = $m" || warn "vm.max_map_count = $m; set 1048576 or more (docs/SETUP.md)"
+d=${VSOCK_DIR:-/tmp/vphone-vsock}
+if [ -d "$d" ]; then
+  [ "$(stat -c %u "$d")" = "$(id -u)" ] && [ $((0$(stat -c %a "$d") & 022)) = 0 ] && pass "$d is yours, mode $(stat -c %a "$d")" ||
+    warn "$d is owned by uid $(stat -c %u "$d") with mode $(stat -c %a "$d"): vphone-api-proxy ignores sockets there (fix: chmod 700 $d, or remove it if it is not yours)"
+fi
+# Many phones (docs/DENSITY.md "Parking and memory"): optional, so notes rather than failures.
+note() { echo "  - $*"; }
+cg=/sys/fs/cgroup; [ "$(id -u)" = 0 ] || cg=$cg/user.slice/user-$(id -u).slice/user@$(id -u).service
+ctl=" $(cat "$cg/cgroup.controllers" 2>/dev/null) "
+[[ $ctl == *" cpu "* && $ctl == *" memory "* ]] && command -v systemd-run >/dev/null &&
+  pass "cgroup cpu and memory controllers available to $(id -un) (vphone-fleet cpu_priority, memory_reclaim)" ||
+  note "no systemd-run or no cpu/memory cgroup controllers for $(id -un): vphone-fleet cannot weight phones' CPU or reclaim their memory"
+z=$(cat /sys/module/zswap/parameters/enabled 2>/dev/null)
+[ "$z" = Y ] && [ -n "$(swapon --noheadings 2>/dev/null)" ] && pass "zswap on, swap present (vphone-fleet memory_reclaim can be turned on)" ||
+  note "zswap ${z:-absent}, swap: $(swapon --noheadings --show=NAME 2>/dev/null | tr '\n' ' ')- keep vphone-fleet's memory_reclaim off until both are set up (docs/DENSITY.md)"
 command -v cargo >/dev/null && pass "Rust (cargo)" || warn "Rust not installed (https://rustup.rs)"
 command -v ninja >/dev/null && command -v meson >/dev/null && pass "meson and ninja" || warn "meson or ninja missing"
 [ $ok = 0 ] && echo "All checks passed." || echo "Fix the items marked ! before building or booting."

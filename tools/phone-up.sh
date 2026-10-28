@@ -11,7 +11,14 @@
 # (fleet/vphone-api-proxy: `cargo spark` in fleet/ on aarch64, `cargo build --release` elsewhere;
 # VPHONE_API_PROXY names another binary).
 # It prints its token unless VPHONE_API_TOKEN sets one, logs each connection with API_VERBOSE=1,
-# and exits with QEMU.
+# touches runs/ID/activity at each connection (vphone-fleet wakes a parked phone on it), and exits
+# with QEMU.
+#
+# QEMU runs in a transient systemd scope vphone-ID-PID.scope in vphones.slice (`systemd-run
+# --scope`, --user when not root; its name goes in runs/ID/scope), where vphone-fleet sets the
+# phone's CPU weight and reclaims its memory. Nothing is written to systemd's unit folders; the
+# scope ends with QEMU. Without systemd-run, or without the cpu and memory controllers delegated
+# to this user, the phone starts plainly with one warning. VPHONE_SCOPE=0 skips the scope.
 #
 # Exit 2: the phone's Disk.img, nvram.bin or SEPStorage is already open. The drives are opened with
 # file.locking=off, so QEMU itself would let a second guest write the same disk. Exit 1: a golden,
@@ -117,7 +124,26 @@ if [ -n "${API_LISTEN:-}" ]; then
   # This shell's pid becomes QEMU's at the exec below, so --exit-with-parent ends it with the
   # phone. The lock fds stay out of it: a proxy outliving QEMU must not keep the files locked.
   "$proxy" --listen "$API_LISTEN" --cid "$CID" --vsock-dir "${VSOCK_DIR:-/tmp/vphone-vsock}" \
-    --exit-with-parent $$ ${API_VERBOSE:+--verbose} 7<&- 8<&- 9<&- &
+    --activity "$R/activity" --exit-with-parent $$ ${API_VERBOSE:+--verbose} 7<&- 8<&- 9<&- &
+fi
+# systemd-run --scope moves this process into the scope and execs the command, so the pid stays
+# QEMU's. --expand-environment=no: systemd-run would otherwise expand $ in the arguments.
+scope=()
+rm -f "$R/scope"
+if [ "${VPHONE_SCOPE:-1}" = 1 ]; then
+  user=() cg=/sys/fs/cgroup
+  if [ "$(id -u)" != 0 ]; then user=(--user); cg=$cg/user.slice/user-$(id -u).slice/user@$(id -u).service; fi
+  ctl=" $(cat "$cg/cgroup.controllers" 2>/dev/null) "
+  if [[ $ctl == *" cpu "* && $ctl == *" memory "* ]] &&
+    systemd-run "${user[@]}" --scope --quiet --expand-environment=no true 2>/dev/null; then
+    scope=(systemd-run "${user[@]}" --scope --quiet --expand-environment=no --unit="vphone-$id-$$"
+      --slice=vphones.slice -p CPUWeight=100 -p MemoryAccounting=yes)
+    echo "vphone-$id-$$.scope" >"$R/scope"
+  else
+    echo "phone-up: warning: no systemd scope (systemd-run missing, or the cpu and memory cgroup" \
+      "controllers are not delegated to $(id -un)): starting plainly; vphone-fleet can still park" \
+      "this phone but not weight its CPU or reclaim its memory" >&2
+  fi
 fi
 # -name marks it a phone: tools/boot-test.sh leaves phones running.
-exec ./run-vphone.sh "$VM" -name "phone-$id" -qmp "unix:$R/qmp.sock,server,nowait" "$@"
+exec "${scope[@]}" ./run-vphone.sh "$VM" -name "phone-$id" -qmp "unix:$R/qmp.sock,server,nowait" "$@"

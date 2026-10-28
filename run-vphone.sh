@@ -146,7 +146,11 @@ if [ "$VSOCK" = auto ]; then
 fi
 if [ "$CID" != 0 ]; then
   if [ "$VSOCK" = uds ]; then
-    mkdir -p "$VSOCK_DIR"
+    # 0700: vphone-api-proxy uses a socket only in a directory nobody else can write, and a
+    # umask of 002 (Ubuntu's user default) would make it 0775. Only the socket's own directory
+    # needs it, which is all -m sets with -p.
+    # shellcheck disable=SC2174
+    mkdir -p -m 700 "$VSOCK_DIR"
     args+=(-device "virtio-vsock-uds-pci,guest-cid=$CID,uds-path=$VSOCK_DIR/$CID.sock")
   else
     rm -f "$VSOCK_DIR/$CID.sock"  # tools prefer the socket when it exists

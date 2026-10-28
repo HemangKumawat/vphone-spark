@@ -1,16 +1,18 @@
 # The host-side control plane for many phones on one host (docs/DENSITY.md). Linux only.
 # Build for a DGX Spark from any host: cargo spark (see .cargo/config.toml).
 [workspace]
-members = ["vphone-api-proxy"]
+members = ["vphone-api-proxy", "vphone-fleet"]
 resolver = "3"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"  # let chains (1.88), File::try_lock (1.89)
 license = "MIT"
 
 [workspace.dependencies]
 libc = "0.2.170"
+# config/profiles.toml and phone.toml; no serde derive, no proc macros.
+toml = { version = "1.1", default-features = false, features = ["parse", "std", "serde"] }
 
 [profile.release]
 lto = true

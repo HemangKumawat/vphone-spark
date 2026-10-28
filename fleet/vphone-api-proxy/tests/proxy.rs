@@ -396,3 +396,67 @@ fn a_socket_another_user_could_have_planted_is_not_used() {
         "{answer}"
     );
 }
+
+#[test]
+fn a_closed_log_pipe_does_not_stop_the_proxy() {
+    use std::process::{Command, Stdio};
+    let dir = vsock_dir();
+    let guest = fake_vphoned(&dir, 0);
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let activity = dir.join("activity");
+    let mut proxy = Command::new(env!("CARGO_BIN_EXE_vphone-api-proxy"))
+        .args([
+            "--listen",
+            &format!("127.0.0.1:{port}"),
+            "--cid",
+            &CID.to_string(),
+        ])
+        .arg("--vsock-dir")
+        .arg(&dir)
+        .arg("--activity")
+        .arg(&activity)
+        .arg("--verbose")
+        .env("VPHONE_API_TOKEN", TOKEN)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Close the read end before the proxy logs anything: every log line then meets EPIPE.
+    drop(proxy.stderr.take());
+    let started = Instant::now();
+    let mut client = loop {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(c) => break c,
+            Err(e) => {
+                assert!(proxy.try_wait().unwrap().is_none(), "the proxy exited: {e}");
+                assert!(started.elapsed() < Duration::from_secs(10), "{e}");
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    };
+    client
+        .write_all(
+            format!("GET /v1/health HTTP/1.1\r\nAuthorization: Bearer {TOKEN}\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+    let mut answer = String::new();
+    client.read_to_string(&mut answer).unwrap();
+    guest.join().unwrap();
+    assert!(
+        answer.starts_with("GET /v1/health HTTP/1.1\r\n"),
+        "{answer}"
+    );
+    // The verbose line for that connection was written after the answer: still alive after it.
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        proxy.try_wait().unwrap().is_none(),
+        "the proxy died after logging"
+    );
+    assert!(activity.exists(), "--activity was not created");
+    proxy.kill().unwrap();
+    proxy.wait().unwrap();
+}

@@ -228,14 +228,15 @@ do_prepare() {
 
 do_patch() {
   # iOS 27 pairings need the seal patcher, which mounts the restore ramdisk read-write through
-  # linux-apfs-rw (root), and the TXM boot pre-check. A 26.x pairing patches as the user.
+  # linux-apfs-rw (root). A 26.x pairing patches as the user. (The restore TXM's pre-check for
+  # the SSH ramdisk is not this step: restore-tree-mode.sh ssh applies it in the cfw step.)
   case $IOS in
     27.*)
       # This checkout's patched module (./setup.sh build), not a distro apfs that refuses iOS 27.
       if [ "$DRY" = 1 ] || ! grep -q '^apfs ' /proc/modules; then
         dry sudo insmod "$VSETUP_SRC/.build/linux-apfs-rw/apfs.ko"
       fi
-      dry sudo "$VC" fw patch --restore-txm-precheck -l "$VSETUP_DEVICES" "$NAME" ;;
+      dry sudo "$VC" fw patch -l "$VSETUP_DEVICES" "$NAME" ;;
     *)
       dry "$VC" fw patch -l "$VSETUP_DEVICES" "$NAME" ;;
   esac

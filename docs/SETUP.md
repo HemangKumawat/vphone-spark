@@ -71,7 +71,7 @@ sudo dnf install git gcc gcc-c++ clang lld binutils make cmake ninja-build meson
 ```
 
 On other distributions, install the same packages under their names there. `lld` provides
-`lld-link`, which QEMU's build needs. (Checked in a clean
+`lld-link` and `ld.lld`, which reims-vgpu's option ROM is linked with (`reims-vgpu/firmware/Makefile`). (Checked in a clean
 Fedora 44 container: they all install, every library the build links against is then present, and the GPU library's SDL window code configures.)
 
 Then:

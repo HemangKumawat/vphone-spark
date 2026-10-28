@@ -35,7 +35,7 @@ pkg_feeds() {
   log " Installing splash-screen packages for $distro"
   case $distro in
     fedora)
-      sudo dnf install -y git gcc gcc-c++ clang binutils make cmake ninja-build meson \
+      sudo dnf install -y git gcc gcc-c++ clang lld binutils make cmake ninja-build meson \
         python3 python3-pillow glib2-devel pixman-devel lzfse-devel libslirp-devel \
         libssh-devel libzstd-devel nettle-devel gnutls-devel gtk3-devel \
         sdl2-compat-devel bzip2-devel libX11-devel wayland-devel libxkbcommon-devel \
@@ -45,7 +45,7 @@ pkg_feeds() {
         libusb1-devel libplist-devel libimobiledevice-glue-devel openssl-devel libcurl-devel ;;
     ubuntu|debian|linuxmint)
       sudo apt-get update
-      sudo apt-get install -y git gcc g++ clang binutils make cmake ninja-build meson \
+      sudo apt-get install -y git gcc g++ clang lld binutils make cmake ninja-build meson \
         python3 python3-pil python3-setuptools pkg-config \
         libglib2.0-dev libpixman-1-dev liblzfse-dev libslirp-dev libssh-dev \
         libzstd-dev libnettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
@@ -55,7 +55,7 @@ pkg_feeds() {
         usbip sshfs fuse3 p7zip-full linux-headers-generic \
         libusb-1.0-0-dev libplist-dev libimobiledevice-glue-dev libssl-dev libcurl4-openssl-dev ;;
     arch|cachyos|manjaro)
-      sudo pacman -S --needed --noconfirm git gcc clang binutils make cmake ninja meson \
+      sudo pacman -S --needed --noconfirm git gcc clang lld binutils make cmake ninja meson \
         python python-pillow glib2 pixman lzfse libslirp libssh zstd nettle gnutls gtk3 \
         sdl2 bzip2 libx11 libxkbcommon wayland vulkan-icd-loader vulkan-tools \
         socat gdb perf usbip sshfs fuse3 p7zip linux-headers \

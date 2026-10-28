@@ -60,7 +60,7 @@ seconds to open and scrolling runs at about 60 frames/s with occasional stutters
 On Fedora:
 
 ```sh
-sudo dnf install git gcc gcc-c++ clang binutils make cmake ninja-build meson python3 rsync \
+sudo dnf install git gcc gcc-c++ clang lld binutils make cmake ninja-build meson python3 rsync \
   glib2-devel pixman-devel lzfse-devel libslirp-devel libssh-devel libzstd-devel \
   nettle-devel gnutls-devel gtk3-devel sdl2-compat-devel bzip2-devel \
   libX11-devel libXScrnSaver-devel wayland-devel libxkbcommon-devel \
@@ -70,7 +70,8 @@ sudo dnf install git gcc gcc-c++ clang binutils make cmake ninja-build meson pyt
   libimobiledevice-devel libusbmuxd-devel libtatsu-devel libarchive-devel
 ```
 
-On other distributions, install the same packages under their names there. (Checked in a clean
+On other distributions, install the same packages under their names there. `lld` provides
+`lld-link`, which QEMU's build needs. (Checked in a clean
 Fedora 44 container: they all install, every library the build links against is then present, and the GPU library's SDL window code configures.)
 
 Then:

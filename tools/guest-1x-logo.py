@@ -17,6 +17,26 @@ DIR = "/System/Library/PrivateFrameworks/ProgressUI.framework"
 cid = int(sys.argv[1])
 
 
+def response(s):
+    """One HTTP response's body: up to its Content-Length, since vphoned can keep the
+    connection open after replying (tools/vphoned-update.sh)."""
+    raw = b""
+    while b"\r\n\r\n" not in raw:
+        chunk = s.recv(1 << 16)
+        if not chunk:
+            break
+        raw += chunk
+    head, _, body = raw.partition(b"\r\n\r\n")
+    length = next((int(l.split(b":", 1)[1]) for l in head.split(b"\r\n")
+                   if l.lower().startswith(b"content-length:")), None)
+    while length is None or len(body) < length:
+        chunk = s.recv(1 << 20)
+        if not chunk:
+            break
+        body += chunk
+    return body if length is None else body[:length]
+
+
 def rpc(method, **params):
     body = json.dumps({"method": method, "params": params, "id": 1}).encode()
     s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
@@ -27,10 +47,7 @@ def rpc(method, **params):
     s.settimeout(120)
     s.sendall(b"POST /v1/rpc HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
               b"Connection: close\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
-    raw = b""
-    while chunk := s.recv(1 << 20):
-        raw += chunk
-    r = json.loads(raw.partition(b"\r\n\r\n")[2])
+    r = json.loads(response(s))
     if "error" in r:
         sys.exit(f"{method}: {r['error']['message']}")
     return r["result"]

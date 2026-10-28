@@ -146,8 +146,14 @@ firmware's disk images, built for the running kernel:
 
 ```sh
 git clone https://github.com/linux-apfs/linux-apfs-rw.git .build/linux-apfs-rw
+git -C .build/linux-apfs-rw checkout 03187127cd2e62cf78321cdb942eb3a7b17981f9
+git -C .build/linux-apfs-rw apply ../../patches/linux-apfs-rw-ios27.patch   # iOS 27 volumes
 make -C .build/linux-apfs-rw          # -> .build/linux-apfs-rw/apfs.ko, loaded when needed
 ```
+
+The patch accepts the volume features iOS 27 sets (three new feature bits, and PFK, which it
+now warns about instead of refusing); without it iOS 27's volumes do not mount. `setup/setup.sh`
+does all of this.
 
 Rebuild it after a kernel update.
 

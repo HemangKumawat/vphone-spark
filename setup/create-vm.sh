@@ -219,7 +219,10 @@ do_prepare() {
   # linux-apfs-rw (root), and the TXM boot pre-check. A 26.x pairing patches as the user.
   case $IOS in
     27.*)
-      dry sudo sh -c "modprobe apfs 2>/dev/null || insmod $VSETUP_SRC/.build/linux-apfs-rw/apfs.ko" || true
+      # This checkout's patched module (./setup.sh build), not a distro apfs that refuses iOS 27.
+      if [ "$DRY" = 1 ] || ! grep -q '^apfs ' /proc/modules; then
+        dry sudo insmod "$VSETUP_SRC/.build/linux-apfs-rw/apfs.ko"
+      fi
       dry sudo "$VC" fw patch --restore-txm-precheck -l "$VSETUP_DEVICES" "$NAME" ;;
     *)
       dry "$VC" fw patch -l "$VSETUP_DEVICES" "$NAME" ;;

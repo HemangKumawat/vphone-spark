@@ -159,8 +159,28 @@ build_creator() {
     swift build --build-system swiftbuild --scratch-path .build/out )
 }
 build_usbmuxd() { "$VSETUP_SRC/tools/build-usbmuxd-32k.sh"; }
+# linux-apfs-rw with the iOS 27 volume features accepted (patches/linux-apfs-rw-ios27.patch):
+# fw patch's seal patcher mounts the restore ramdisk with it, and the SSH ramdisk injector too.
+# Built for the running kernel; rebuilt when the kernel changed.
+APFS_RW_COMMIT=03187127cd2e62cf78321cdb942eb3a7b17981f9
+build_apfs() {
+  local dir="$VSETUP_SRC/.build/linux-apfs-rw"
+  if [ ! -d "$dir/.git" ]; then
+    log " Fetching linux-apfs-rw"
+    git clone https://github.com/linux-apfs/linux-apfs-rw.git "$dir"
+  fi
+  if [ "$(git -C "$dir" rev-parse HEAD)" != "$APFS_RW_COMMIT" ] || git -C "$dir" diff --quiet; then
+    git -C "$dir" checkout -q -f "$APFS_RW_COMMIT"
+    git -C "$dir" apply "$VSETUP_SRC/patches/linux-apfs-rw-ios27.patch"
+  fi
+  if [ -f "$dir/apfs.ko" ] && [ "$(modinfo -F vermagic "$dir/apfs.ko" | cut -d' ' -f1)" != "$(uname -r)" ]; then
+    make -C "$dir" clean
+  fi
+  log " Building linux-apfs-rw for kernel $(uname -r)"
+  make -C "$dir"
+}
 
-do_phase build && for step in reims qemu creator usbmuxd; do
+do_phase build && for step in reims qemu creator usbmuxd apfs; do
   "build_$step"
 done
 

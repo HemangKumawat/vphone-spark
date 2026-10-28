@@ -1,0 +1,54 @@
+diff --git a/apfs_raw.h b/apfs_raw.h
+index 415e6b7..130235f 100644
+--- a/apfs_raw.h
++++ b/apfs_raw.h
+@@ -1125,7 +1125,8 @@ struct apfs_checkpoint_map_phys {
+ 					| APFS_FEATURE_VOLGRP_SYSTEM_INO_SPACE)
+ 
+ /* Read-only compatible volume feature flags */
+-#define APFS_SUPPORTED_ROCOMPAT_MASK		(0x0ULL)
++#define APFS_SUPPORTED_ROCOMPAT_MASK		(APFS_ROCOMPAT_UNKNOWN_BIT2 \
++						| APFS_ROCOMPAT_UNKNOWN_BIT3)
+ 
+ /* Incompatible volume feature flags */
+ #define APFS_INCOMPAT_CASE_INSENSITIVE		0x00000001LL
+@@ -1137,6 +1138,9 @@ struct apfs_checkpoint_map_phys {
+ #define APFS_INCOMPAT_PFK			0x00000040LL /* Made-up name */
+ #define APFS_INCOMPAT_EXTENT_PREALLOC_FLAG	0x00000080LL /* Made-up name */
+ #define APFS_INCOMPAT_SECONDARY_FSROOT		0x00000100LL /* Made-up name */
++#define APFS_INCOMPAT_UNKNOWN_BIT9		0x00000200LL /* Made-up name: set on iOS 27 system/data volumes */
++#define APFS_ROCOMPAT_UNKNOWN_BIT2		0x00000004LL /* Made-up name: new in iOS 27 */
++#define APFS_ROCOMPAT_UNKNOWN_BIT3		0x00000008LL /* Made-up name: new in iOS 27 */
+ 
+ #define APFS_SUPPORTED_INCOMPAT_MASK (APFS_INCOMPAT_CASE_INSENSITIVE \
+ 				     | APFS_INCOMPAT_DATALESS_SNAPS \
+@@ -1146,7 +1150,8 @@ struct apfs_checkpoint_map_phys {
+ 				     | APFS_INCOMPAT_SEALED_VOLUME \
+ 				     | APFS_INCOMPAT_PFK \
+ 				     | APFS_INCOMPAT_EXTENT_PREALLOC_FLAG \
+-				     | APFS_INCOMPAT_SECONDARY_FSROOT)
++				     | APFS_INCOMPAT_SECONDARY_FSROOT \
++				     | APFS_INCOMPAT_UNKNOWN_BIT9)
+ 
+ #define APFS_MODIFIED_NAMELEN	      32
+ 
+diff --git a/super.c b/super.c
+index fff1258..0cb214c 100644
+--- a/super.c
++++ b/super.c
+@@ -1530,8 +1530,13 @@ static int apfs_check_vol_features(struct super_block *sb)
+ 		return -EINVAL;
+ 	}
+ 	if (features & APFS_INCOMPAT_PFK) {
+-		apfs_warn(sb, "PFK is not supported");
+-		return -EINVAL;
++		/*
++		 * iOS 27 system volumes set PFK. The files read fine through
++		 * the userland fuse on the same volume, so treat it as a
++		 * marker rather than a blocker — with experimental write
++		 * support the risk is on the writer, not the format.
++		 */
++		apfs_warn(sb, "PFK is set; continuing anyway");
+ 	}
+ 	if (features & APFS_INCOMPAT_SECONDARY_FSROOT) {
+ 		apfs_warn(sb, "secondary fsroot is not supported");

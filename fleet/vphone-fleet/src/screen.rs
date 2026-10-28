@@ -77,7 +77,7 @@ pub(crate) fn shot(
     let result = answer["result"]
         .as_object()
         .ok_or_else(|| fail(&format!("{code} {text}")))?;
-    // ponytail: the image is the longest string in the result; its key name is IcliKit's.
+    // shortcut: the image is the longest string in the result; its key name is IcliKit's.
     let image = result
         .values()
         .filter_map(Value::as_str)

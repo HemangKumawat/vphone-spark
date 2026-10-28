@@ -18,7 +18,7 @@ SYSFS=${SYSFS:-/sys}
 # "<fast cpus> <slow cpus>" as taskset lists. Cores of one type can differ slightly (GB10's X925s
 # top out at 3.9-4.0 GHz), so the tiers split halfway between the fastest and slowest capacity, and
 # only when the slowest is over 10% below the fastest; nothing on a uniform host or without cpu_capacity.
-# ponytail: two tiers; a three-tier host gets its top tier plus the middle one as "fast".
+# shortcut: two tiers; a three-tier host gets its top tier plus the middle one as "fast".
 read -r fast slow < <(grep -H . "$SYSFS"/devices/system/cpu/cpu[0-9]*/cpu_capacity 2>/dev/null |
   sed -E 's#.*/cpu([0-9]+)/cpu_capacity:#\1 #' | sort -n |
   awk '{n[NR]=$1; c[NR]=$2+0; if (c[NR]>m) m=c[NR]; if (NR==1 || c[NR]<l) l=c[NR]}

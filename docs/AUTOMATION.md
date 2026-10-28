@@ -37,7 +37,7 @@ Three parts are guesses until a real guest confirms them: QMP input reaching iOS
 cd fleet && cargo spark            # static aarch64 musl binary (cargo build --release elsewhere)
 vphone-fleet serve &               # the API and the 1 s loop
 export FLEET=http://127.0.0.1:8760
-export TOKEN=$(cat vms/runs/fleet-token)   # or set VPHONE_FLEET_TOKEN before serve
+export TOKEN=$(cat runs/fleet-token)       # or set VPHONE_FLEET_TOKEN before serve
 ```
 
 ## curl: five phones, one app, a screenshot each
@@ -196,8 +196,8 @@ installs it), `launch_app`, `read_file`, `write_file`, `call_phone` (any vphoned
 
 The server is hand-written: newline-delimited JSON-RPC over stdio is a small loop on
 `serde_json` (`fleet/vphone-fleet/src/mcp.rs`, with the 17 tool schemas). The official Rust SDK (`rmcp`, modelcontextprotocol/rust-sdk) was the alternative. It
-needs tokio and proc macros in a binary that is otherwise synchronous and static, and its licence
-field is NOASSERTION.
+needs tokio and proc macros in a binary that is otherwise synchronous and static; a hand-written
+stdio server keeps the binary small.
 
 ## Feature switches
 

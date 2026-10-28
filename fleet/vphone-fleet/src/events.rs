@@ -132,7 +132,7 @@ fn connect(upstream: &Upstream) -> Result<UnixStream, String> {
 /// closes the stream or nobody listens.
 fn watch(id: &str, upstream: &Upstream, journal: &Journal) -> Result<(), String> {
     let mut s = connect(upstream)?;
-    // ponytail: one mask per connection, not per frame; vphoned checks only that frames are masked.
+    // shortcut: one mask per connection, not per frame; vphoned checks only that frames are masked.
     let mut mask = [0u8; 4];
     File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut mask))

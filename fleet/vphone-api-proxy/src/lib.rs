@@ -209,7 +209,7 @@ pub fn forward(
     head: &Head,
     early: &[u8],
 ) -> io::Result<(u64, u64)> {
-    // ponytail: one thread per direction, so two per connection; epoll if thousands of clients.
+    // shortcut: one thread per direction, so two per connection; epoll if thousands of clients.
     let upgraded = head.is_upgrade();
     let head = head.to_bytes();
     client.set_nodelay(true)?;

@@ -151,7 +151,7 @@ pub(crate) fn read_message(mut r: impl Read) -> io::Result<(u8, Vec<u8>)> {
             .zip(mask.iter().cycle())
             .for_each(|(b, k)| *b ^= k);
         // A control frame may arrive between the fragments of a message. A close ends the
-        // message; a ping or pong there is dropped (ponytail: its pong is not sent, which only
+        // message; a ping or pong there is dropped (shortcut: its pong is not sent, which only
         // matters to a peer that fragments and pings at once).
         if op >= CLOSE {
             if opcode.is_none() || op == CLOSE {

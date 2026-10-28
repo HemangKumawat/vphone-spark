@@ -157,7 +157,7 @@ impl Fleet {
             return Ok(format!("phone {id} already runs (pid {pid})"));
         }
         // Started elsewhere (`vphone-fleet start` in another process) since this one last looked:
-        // adopt it rather than launch a second QEMU and orphan the first. ponytail: a launcher
+        // adopt it rather than launch a second QEMU and orphan the first. shortcut: a launcher
         // caught mid-execve (empty cmdline, microseconds) is not recognised; phone-up.sh's locks
         // still refuse the second QEMU, at the cost of its pid file. Retry next tick if seen.
         if let Some(pid) = read_pid(&self.paths.run(id))

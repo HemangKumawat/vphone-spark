@@ -234,7 +234,7 @@ pub(crate) fn serve(paths: &Paths, config: Config, listen: &str) -> Result<(), S
         "[fleet] features:\n{}",
         fleet.config.features.table().trim_end()
     );
-    // ponytail: leaked, as serve runs until the process ends; every thread can borrow them.
+    // shortcut: leaked, as serve runs until the process ends; every thread can borrow them.
     let fleet: &'static Mutex<Fleet> = Box::leak(Box::new(Mutex::new(fleet)));
     let token: &'static Token = Box::leak(Box::new(token));
     thread::spawn(move || run_loop(fleet));

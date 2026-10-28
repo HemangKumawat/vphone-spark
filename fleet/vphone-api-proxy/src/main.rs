@@ -135,7 +135,7 @@ fn run() -> Result<(), String> {
                 .peer_addr()
                 .map_or_else(|_| "?".to_owned(), |a| a.to_string());
             let (upstream, token) = (&upstream, &token);
-            // ponytail: no cap on connections; one listener serves one phone, on loopback by default.
+            // shortcut: no cap on connections; one listener serves one phone, on loopback by default.
             let spawned = thread::Builder::new().spawn_scoped(scope, move || {
                 let line = serve(client, upstream, token);
                 if verbose {

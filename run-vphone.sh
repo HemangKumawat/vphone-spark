@@ -21,15 +21,14 @@ set -euo pipefail
 
 VM=${1:?usage: run-vphone.sh <vm-dir> [qemu args...]}
 shift
-HERE=$(cd "$(dirname "$0")" && pwd)
-QEMU=${QEMU:-$HERE/qemu/build/qemu-system-aarch64}
+QEMU=${QEMU:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/qemu/build/qemu-system-aarch64}   # this checkout's
 SMP=${SMP:-8}
 MEM=${MEM:-8G}
 
 ecid=$(tr -d ' \n' < "$VM/ecid")
 
 # The ROM files a machine boots: config.plist's romImages (OpenAVB/OpenSEP for
-# machines made by vphone-cli 2.10+, or on Linux) or Apple's Virtualization.framework names.
+# machines made by vphone-cli 2.10+) or Apple's Virtualization.framework names.
 rom_name=$(python3 -c "import plistlib,sys;print((plistlib.load(open(sys.argv[1],'rb')).get('romImages') or {}).get('avpBooter',''))" "$VM/config.plist" 2>/dev/null)
 seprom_name=$(python3 -c "import plistlib,sys;print((plistlib.load(open(sys.argv[1],'rb')).get('romImages') or {}).get('avpSEPBooter',''))" "$VM/config.plist" 2>/dev/null)
 [ -n "$rom_name" ] || rom_name=AVPBooter.vresearch1.bin
@@ -52,9 +51,9 @@ args=(
   # root APFS disk to be present as an Apple VirtIO PCI storage device.
   -drive "file=$VM/Disk.img,if=none,id=root-pci,format=raw,file.locking=off"
   # Virtualization.framework also exposes the auxiliary storage as an "aux"
-  # virtio-blk device; the RestoreOS builds its IONVRAM service from it.
-  # Like the pflash, it starts past the 16 KiB aux-storage header: without the
-  # offset the restore writes the firmware store at byte 0 and the ROM falls back to DFU.
+  # virtio-blk device; the RestoreOS builds its IONVRAM service from it. Like the pflash, it
+  # starts past the 16 KiB aux-storage header: without the offset the restore writes the
+  # firmware store at byte 0 and AVPBooter, which reads it at 16 KiB, falls back to DFU.
   -drive "file=$VM/nvram.bin,if=none,id=aux-pci,format=raw,offset=16384,file.locking=off"
   -serial mon:stdio
 )
@@ -90,11 +89,11 @@ if [ "${GFX:-0}" = 1 ]; then
   # A degradation reims-vgpu would die at (its DIES list) is recorded and relayed instead, so
   # one app's use of an unmodelled Metal corner costs an inexact frame, not the VM. The census
   # (census-<pid>.json) lists every kind met. REIMS_VGPU_CENSUS_DIR= (empty) restores deaths.
-  export REIMS_VGPU_CENSUS_DIR=${REIMS_VGPU_CENSUS_DIR-$HERE/runs/census}
+  export REIMS_VGPU_CENSUS_DIR=${REIMS_VGPU_CENSUS_DIR-$PWD/runs/census}
   if [ -n "$REIMS_VGPU_CENSUS_DIR" ]; then mkdir -p "$REIMS_VGPU_CENSUS_DIR"; else unset REIMS_VGPU_CENSUS_DIR; fi
 fi
 # 16 KiB target pages (iOS's granule) plus a page-count range-flush check in cputlb.c: together
-# they halve the time spent refilling the softmmu TLB (docs/PERFORMANCE.md).
+# they halve the time spent refilling the softmmu TLB (HANDOFF.md, "16 KiB target pages").
 # VPHONE_TARGET_PAGE_BITS=12 / VPHONE_TLB_RANGE_PAGES=0 restore QEMU's defaults.
 export VPHONE_TARGET_PAGE_BITS=${VPHONE_TARGET_PAGE_BITS:-14}
 export VPHONE_TLB_RANGE_PAGES=${VPHONE_TLB_RANGE_PAGES:-1}
@@ -147,7 +146,7 @@ fi
 [ -n "${TRACE:-}" ] && args+=(-trace "$TRACE")
 [ -n "${GDB:-}" ] && args+=(-gdb "tcp::$GDB" -S)
 
-# Hybrid hosts (e.g. an i7-14700K: P-cores 0-15, E-cores 16-27): keep QEMU on the performance
+# Hybrid hosts (this i7-14700K: P-cores 0-15, E-cores 16-27): keep QEMU on the performance
 # cores, where a vCPU thread runs TCG code far faster than on an efficiency core.
 # VPHONE_CPUS= (empty) leaves placement to the scheduler; any taskset list overrides.
 if [ -z "${VPHONE_CPUS+x}" ] && [ -r /sys/devices/cpu_core/cpus ]; then

@@ -4,6 +4,19 @@ From an empty Linux PC to an iPhone home screen in a window, with no Mac: you in
 dependencies, build vphone-linux, create the virtual iPhone from Apple's published firmware, and
 start it.
 
+> **The short path.** `setup/setup.sh` builds everything (dependencies, sources, binaries, the
+> release bundle — re-runnable, it skips what is done), and `setup/create-vm.sh` then menus you
+> down to a tested device + iOS pairing and runs the whole create flow with one state file per VM.
+> That is all most people need:
+>
+> ```sh
+> ./setup/setup.sh
+> ./setup/create-vm.sh
+> ```
+>
+> The rest of this guide is the manual path — the same steps, every command visible — plus the
+> parts the two scripts do not cover (your own apps, performance tuning).
+
 1. [What you need](#1-what-you-need)
 2. [Install the dependencies](#2-install-the-dependencies)
 3. [Build](#3-build)
@@ -57,7 +70,8 @@ sudo dnf install git gcc gcc-c++ clang lld binutils make cmake ninja-build meson
   libimobiledevice-devel libusbmuxd-devel libtatsu-devel libarchive-devel
 ```
 
-On other distributions, install the same packages under their names there. (Checked in a clean
+On other distributions, install the same packages under their names there. `lld` provides
+`lld-link` and `ld.lld`, which reims-vgpu's option ROM is linked with (`reims-vgpu/firmware/Makefile`). (Checked in a clean
 Fedora 44 container: they all install, every library the build links against is then present, and the GPU library's SDL window code configures.)
 
 Then:
@@ -133,8 +147,14 @@ firmware's disk images, built for the running kernel:
 
 ```sh
 git clone https://github.com/linux-apfs/linux-apfs-rw.git .build/linux-apfs-rw
+git -C .build/linux-apfs-rw checkout 03187127cd2e62cf78321cdb942eb3a7b17981f9
+git -C .build/linux-apfs-rw apply ../../patches/linux-apfs-rw-ios27.patch   # iOS 27 volumes
 make -C .build/linux-apfs-rw          # -> .build/linux-apfs-rw/apfs.ko, loaded when needed
 ```
+
+The patch accepts the volume features iOS 27 sets (three new feature bits, and PFK, which it
+now warns about instead of refusing); without it iOS 27's volumes do not mount. `setup/setup.sh`
+does all of this.
 
 Rebuild it after a kernel update.
 
@@ -218,7 +238,8 @@ where taps reach it:
 These made the biggest difference on the test PC:
 
 1. **In the iPhone's Settings:** Accessibility > Motion > **Reduce Motion** on; Accessibility >
-   Display & Text Size > **Reduce Transparency** on; Display & Brightness > **Auto-Lock: Never**.
+   Display & Text Size > **Reduce Transparency** on; Display & Brightness > **Auto-Lock: Never**
+   (or, with the VM running, `python3 tools/auto-lock-never.py vms/myphone 3`).
 2. **Render at 1x** instead of 3x, about 9 times fewer pixels with the same layout. With the VM
    running:
 
@@ -236,6 +257,9 @@ These made the biggest difference on the test PC:
    ```
 
    `tools/set-scale.sh vms/myphone 3` goes back to 3x.
+   On iOS 27 use `2` instead of `1`: iOS 27 does not go below 2x (2x is still 2.25 times fewer
+   pixels than 3x, and needs no boot logo). Keep an iPhone Duo at 3x for now
+   ([ADVANCED.md](ADVANCED.md#display-scale)).
 3. **Turn off background services** the VM doesn't need for app testing (iCloud, Siri, analytics...).
    More are listed in [ADVANCED.md](ADVANCED.md#background-services).
 

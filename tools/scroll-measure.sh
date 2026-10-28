@@ -15,9 +15,9 @@ done
 tools/qmp.py $Q home; sleep 4
 opened=
 for try in 1 2 3; do
-  tools/screen-changed.py $Q save "${TMPDIR:-/tmp}/screen-home.ppm"
+  tools/screen-changed.py $Q save /tmp/claude-1000/screen-home.ppm
   tools/qmp.py $Q tap 1089 1953; sleep 8
-  if tools/screen-changed.py $Q "${TMPDIR:-/tmp}/screen-home.ppm"; then opened=1; break; fi
+  if tools/screen-changed.py $Q /tmp/claude-1000/screen-home.ppm; then opened=1; break; fi
 done
 [ -n "$opened" ] || { echo "Settings did not open"; exit 1; }
 for i in 1 2; do

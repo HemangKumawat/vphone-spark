@@ -1,5 +1,10 @@
 # Create the VM on Linux
 
+> **The automated path.** `setup/create-vm.sh` runs everything this document describes — the menus
+> (`--device` / `--ios` skip them), the state file per VM so a re-run resumes, and the first boot.
+> This document is the same flow with every command visible, for when a step needs attention by
+> hand.
+
 The whole VM is made on Linux, with no Mac and no file from one: vphone-cli's firmware tooling built
 for Linux (`linux-create/`) downloads and patches the firmware, restores it over USB/IP, and installs
 the custom firmware (CFW) through an SSH ramdisk. The boot ROMs are **OpenAVB** and **OpenSEP**, the
@@ -313,10 +318,14 @@ tools/vphoned.sh POST /v1/rpc '{"method":"screen.unlock","params":{},"id":1}'
 
 Then, on a new VM:
 
-- **Set Auto-Lock to Never** (Settings › Display & Brightness › Auto-Lock). A new VM locks and turns
-  the screen off after 60 s, and iOS then drops every touch (backboardd logs
-  `ignoring touch event ((backlight dim/off))`): it looks as if touch is broken. `screen.unlock`
-  wakes it. vphoned's `display.auto_lock.set` did not change the effective value on the test VM.
+- **Set Auto-Lock to Never**: `python3 tools/auto-lock-never.py vms/myphone 3` (or Settings ›
+  Display & Brightness › Auto-Lock). A new VM locks and turns the screen off after 60 s, and iOS
+  then drops every touch (backboardd logs `ignoring touch event ((backlight dim/off))`): it looks
+  as if touch is broken. `screen.unlock` wakes it. The tool sets it through ManagedConfiguration,
+  as Settings does; profiled ignores that call from a vphoned without ManagedConfiguration's write
+  entitlements (the release's has none, so `display.auto_lock.set` changed nothing), and `cfw
+  install` now merges them in. On a VM installed before that, the tool re-signs the VM's vphoned
+  and installs it in the guest first. The setting is kept across reboots.
 - **Lower the display scale** (optional): a new VM draws at iOS's default 3x (1290x2796). With the
   VM running, `tools/set-scale.sh vms/myphone 1`, then start it again and run
   `python3 tools/guest-1x-logo.py 3` ([SETUP.md step 7](SETUP.md#7-make-it-faster-optional)). On the

@@ -5,7 +5,7 @@
 # Env passes through (e.g. VPHONE_RET_PREFETCH=1).
 cd "$(dirname "$0")/.."
 R=$1; CID=$2; shift 2
-S=${PERF_OUT:-${TMPDIR:-/tmp}/perf-apps}; mkdir -p "$S"
+S=${PERF_OUT:-/tmp/claude-1000/perf-apps}; mkdir -p $S
 tools/boot-test.sh $R $CID -name vphone,debug-threads=on "$@" | tail -1
 P=
 for p in $(pgrep -f -- "-qmp unix:$PWD/runs/$R/"); do

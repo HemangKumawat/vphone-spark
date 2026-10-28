@@ -8,7 +8,7 @@ Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **
   <img src="docs/screenshots/maps.png" width="200" alt="Maps">
   <img src="docs/screenshots/calendar.png" width="200" alt="Calendar">
 </p>
-<p align="center"><i>iOS 26.6.2 running on a Linux PC (Fedora, NVIDIA GPU) in vphone-linux.</i></p>
+<p align="center"><i>iOS 27.0.1 (iPhone 16 Pro, at 2x) running on a Linux PC (Fedora, NVIDIA GPU) in vphone-linux, created with <code>setup/create-vm.sh</code>.</i></p>
 
 vphone-cli runs iOS on an Apple Silicon Mac with Apple's Virtualization.framework, on the
 `vresearch101` virtual platform that Apple's Private Cloud Compute (PCC) research VMs use. vphone-linux
@@ -32,8 +32,15 @@ Development updates: [@YahiaDev on X](https://x.com/YahiaDev).
 ## Status
 
 So far tested on one PC: Fedora 44, Intel i7-14700K, 62 GB RAM, NVIDIA RTX 4080 SUPER (driver
-615.71.09). The guest is iOS 26.6.2 (iPhone17,3 restore image, cloudOS 26.4 firmware pairing),
-created with vphone-cli 2.9.4.
+615.71.09).
+
+Tested guest pairings on Linux:
+
+| Device | iOS | cloudOS | State |
+|---|---|---|---|
+| iPhone17,3 (iPhone 16 Pro) | 26.6.2 (23G90) | 26.4 (23E5207q) | end-to-end: the home screen, created with no Mac |
+| iPhone17,3 (iPhone 16 Pro) | 27.0.1 (24A446) | 26.4 (23E5207q) | end-to-end with `setup/create-vm.sh`: the home screen at 2x, Auto-Lock Never |
+| iPhone19,4 (iPhone Duo) | 27.1 (24A94425) | 26.4 (23E5207q) | the home screen: display, wallpaper, touch (keep it at 3x); needs this repo's QEMU (native X1 and CSSC) |
 
 **Works**
 
@@ -84,26 +91,38 @@ created with vphone-cli 2.9.4.
 ## Quick start
 
 You need a Linux x86_64 PC with a Vulkan GPU (NVIDIA tested), 16 GB RAM or more, about 100 GB free
-disk, and sudo. No Mac.
+disk, and sudo. No Mac. **Two steps**:
 
 ```sh
 git clone https://github.com/YahiaAngelo/vphone-linux.git && cd vphone-linux
-tools/check-host.sh
-./build.sh                                  # QEMU and the GPU library
-# then build the VM-creation tools and create the VM: docs/SETUP.md steps 3-4
-GFX=1 WINDOW=1 ./run-vphone.sh vms/myphone
+./setup/setup.sh                    # deps + sources + all binaries (re-runnable)
+./setup/create-vm.sh                # pick a device and an iOS version; it creates the VM
 ```
 
-The step-by-step guide, with the packages to install, is [docs/SETUP.md](docs/SETUP.md). Already have
-a VM made with vphone-cli on a Mac? [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) shows how to bring
-it over instead.
+`create-vm.sh` menus down to a tested device/iOS pairing, runs the whole create flow
+(`fw prepare` + `fw patch`, the DFU restore, the SSH-ramdisk CFW install, the snapshot flip),
+keeps one state file per VM so a re-run resumes after a failed step, and starts QEMU exactly once
+at the end (never killed by the scripts). Non-interactive:
+
+```sh
+./setup/create-vm.sh --device "iPhone17,3" --ios 26.6.2 --scale 1
+./setup/create-vm.sh --list         # every device and its tested pairings
+```
+
+The pairings tested here: iPhone17,3 + iOS 26.6.2 and + iOS 27.0.1 (end to end with these scripts:
+the home screen), and iPhone19,4 (the iPhone Duo) + iOS 27.1 (the home screen; keep it at 3x). Other
+pairings are macOS-tested and offered as "under test" with a confirmation. Already have a VM made
+with vphone-cli on a Mac? [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) shows how to bring it over
+instead. The step-by-step manual path, with the packages and every command, is
+[docs/SETUP.md](docs/SETUP.md).
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup on Linux: what you need, dependencies, building, creating the VM, first boot, your own apps |
-| [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) | SETUP's step 4 in detail: firmware, restore over USB/IP, custom firmware, first boot |
+| [setup/](setup/README.md) | The two-step setup in this repo: build everything, then pick a device and an iOS version and create the VM |
+| [docs/SETUP.md](docs/SETUP.md) | The manual step-by-step: what you need, dependencies, building, creating the VM, first boot, your own apps |
+| [docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md) | The create flow in detail: firmware, restore over USB/IP, custom firmware, first boot |
 | [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) | Optional: creating the VM with vphone-cli on a Mac and copying it over |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
 | [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, display scale, services, GPU clocks |

@@ -77,7 +77,7 @@ See [ADVANCED.md](ADVANCED.md#background-services):
 - **Display scale** ([ADVANCED.md](ADVANCED.md#display-scale)): 2x needs 2.25x fewer pixels than 3x,
   and 1x about 9x fewer. In Settings scrolling the frame rate barely changed (36.6 → 37.9 frames/s
   average, 56 → 66 peak), but vCPU load fell from 50-60% to 40%.
-- **A 1x width that is a multiple of 32** (`448x932`, not `430x932`). NVIDIA's linear images need
+- **A 1x width that is a multiple of 32** (`448x932`, not `430x932`; `ALIGN32=1 tools/set-scale.sh`), at the cost of the device's own layout: iOS picks it by the exact point size (see [ADVANCED.md](ADVANCED.md#display-scale)). NVIDIA's linear images need
   128-byte rows. At 430 pixels (1720-byte rows) iOS's full-screen surfaces were shadow-copied in and
   out, about 10 screens per frame; at 448 they are aliased. Copies fell from about 246 million to
   1.3 million texels per 30 s at idle.
@@ -135,7 +135,7 @@ Environment variables read by `run-vphone.sh`:
 | `TB_SIZE` | `2048` | TCG code cache in MiB (`-accel tcg,tb-size=`). 2048 is x86-64's maximum; QEMU's default 1 GiB flushed every few minutes |
 | `GFX` | `0` | `1` attaches the paravirtual GPU (`apple-gfx-mmio` on reims-vgpu) |
 | `WINDOW` | `0` | `1` opens reims-vgpu's window (sets `REIMS_VGPU_WINDOW`) |
-| `GFX_RES` | the VM's `gfx-res` file, else `1290x2796` | Framebuffer size (`apple-gfx-mmio.resolution`). At 1x use `448x932` (width a multiple of 32) |
+| `GFX_RES` | the VM's `gfx-res` file, else `1290x2796` | Framebuffer size (`apple-gfx-mmio.resolution`). At 1x `430x932` (`448x932` with the width a multiple of 32: fewer GPU copies, generic layout) |
 | `GFX_MODES` | `$GFX_RES@60` | Display modes offered to the guest (machine `gfx-modes`, `/`-separated) |
 | `GFX_ISOLATION` | `on` | `apple-gfx-mmio.process-isolation`: per-task GPU processes. Keep it on |
 | `REIMS_VGPU_WINDOW_TITLE` | `vphone-linux` | Title of reims-vgpu's window |

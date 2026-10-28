@@ -28,6 +28,13 @@ advice; each project's own license files are authoritative.
   protocols learned by observing Apple's firmware and Virtualization.framework, for interoperability:
   the vpiop mailbox, VSTR SEP storage, and the USB touchscreen's HID report descriptor. The
   repositories contain no Apple binaries, firmware, or code.
+- **Nothing Apple is committed, either.** iOS/IPSW firmware, cloudOS images, the OpenAVB/OpenSEP ROMs,
+  the paravirt GPU driver bundle and `guest-resources` are downloaded from Apple's CDN or unzipped from
+  a vphone-cli release **at run time, into the user's own machine only**, and stay out of every
+  repository: `setup.sh` stages them under `~/vphone-setup-work/` / `~/.cache/vphone/`, and the CI's
+  `no-apple-content` job fails any commit that tracks them (or any blob over 16 MiB). If you fork this
+  project, do not re-host Apple's firmware or vphone-cli's release assets: link to them and let the
+  user fetch from the source, the way this setup does.
 
 ## Why MIT for the glue
 

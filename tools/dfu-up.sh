@@ -4,12 +4,10 @@
 #
 #   tools/dfu-up.sh <vm-dir> <run-dir>
 #
-# With no firmware store in nvram.bin (a new VM), the boot ROM stays in DFU mode; with a restored one
-# and auto-boot=false, iBoot stops at its recovery prompt. Both are what `vphone-cli restore` needs.
-# tools/dfu-stop.sh <vm-dir> stops the VM again.
+# The VM's Disk.img must hold no bootable system (a fresh, empty one), so AVPBooter stays in DFU.
 # Then, as root in other terminals: tools/usbmuxd-32k.sh and tools/usbip-autoattach.sh, and run
 # `vphone-cli restore`. Logs go to <run-dir> (serial.log, stderr.log, qemu.log, usbip.log).
-# A VM from another run on the same disk is refused; one this <run-dir> started is restarted.
+# Only the QEMU and exporter that a previous dfu-up.sh started for <run-dir> are stopped first.
 #
 # Env: QEMU (default: qemu/build),
 #      GFX=1 WINDOW=1 (open the display window to watch), SMP (8), VUSB_DEBUG=1 (log every URB), VUSB_URB_TIMEOUT (seconds, default 300).
@@ -42,8 +40,6 @@ for p in $(pgrep -x qemu-system-aar || true); do
   tr '\0' ' ' </proc/$p/cmdline | grep -q -- "$SOCK" && kill "$p"
 done
 sleep 2
-QEMU_BIN=${QEMU:-$PWD/qemu/build/qemu-system-aarch64}
-[ -x "$QEMU_BIN" ] || { echo "QEMU is not built: $QEMU_BIN is missing. Run ./build.sh first (docs/SETUP.md, step 3)." >&2; exit 1; }
 rm -f "$SOCK"
 (QEMU=${QEMU:-$PWD/qemu/build/qemu-system-aarch64} CID=0 SMP=${SMP:-8} \
   GFX=${GFX:-0} WINDOW=${WINDOW:-0} \

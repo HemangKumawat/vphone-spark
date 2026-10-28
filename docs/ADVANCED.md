@@ -20,9 +20,9 @@ The submodules are pinned to these commits (each fork's `vphone` branch):
 
 | Submodule | Fork | Upstream | Fork branch | Commit |
 |---|---|---|---|---|
-| `qemu` | [YahiaAngelo/qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone) | [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon) `master` @ `cc4302a9` | `vphone` | `3ed85774c2989addec3056a866991762b60c4b5c` |
-| `reims-vgpu` | [YahiaAngelo/reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) | [steelbrain/reims-vgpu](https://github.com/steelbrain/reims-vgpu) `development` @ `56eed1eb` | `vphone` | `8ca9b8fb22c29f0e7ca66bdb8afa28f692361006` |
-| `metal2vulkan` | [YahiaAngelo/metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan) | [steelbrain/metal2vulkan](https://github.com/steelbrain/metal2vulkan) `development` @ `6b322fb5` | `vphone` | `fb0bd570ecfead540ce82b670a52c7245ccb616c` |
+| `qemu` | [YahiaAngelo/qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone) | [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon) `master` @ `cc4302a9` | `vphone` | `4da65a96e039413faff00ed52e3d956bf931bfd9` |
+| `reims-vgpu` | [YahiaAngelo/reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) | [steelbrain/reims-vgpu](https://github.com/steelbrain/reims-vgpu) `development` @ `2d25dc1e` | `vphone-next2` | `ab0d0e02b98ee73c690789e0729f83bdca6ef200` |
+| `metal2vulkan` | [YahiaAngelo/metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan) | [steelbrain/metal2vulkan](https://github.com/steelbrain/metal2vulkan) `development` @ `a759d0e8` | `vphone-next2` | `f77b2d78f19120bf13724ae100849444622c1942` |
 
 reims-vgpu's `Cargo.toml` has a `[patch]` section that takes metal2vulkan from `../metal2vulkan`, so the
 `vphone` metal2vulkan is used only when both submodules sit side by side, as they do here.
@@ -77,8 +77,8 @@ framebuffer with a lower UI scale gives the same 430x932-point layout with far f
 | Scale | `gfx-res` | Pixels vs 3x |
 |---|---|---|
 | 3x (default) | 1290x2796 | 1 |
-| 2x | 896x1864 (860 rounded up to a multiple of 32) | about 1/2.2 |
-| 1x | 448x932 (430x932 rounded up to a multiple of 32) | about 1/8.6 |
+| 2x | 860x1864 | about 1/2.2 |
+| 1x | 430x932 | about 1/9 |
 
 The scale comes from LLB, which fills `/chosen/display-scale` from the boot video settings.
 `tools/display-scale.py` patches that one instruction in the firmware store inside `nvram.bin`. This
@@ -89,14 +89,31 @@ is the same patch vphone-cli applies for iPads (`IBootPatchDisplayScale`).
 `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`),
 and vphoned clears that cache only when the device tree changes, which a scale change does not. With
 the stale cache, a VM patched to 1x boots with a 3x interface on the 1x screen: everything zoomed in.
-`tools/set-scale.sh VM 1|2|3` does the whole change with the VM running: it deletes the cache through
-vphoned, shuts the guest down, patches LLB and writes `gfx-res`. By hand, delete that file (vphoned's
+`tools/set-scale.sh VM 1|2|3` does the whole change with the VM running: it sets the scale in the
+guest's device tree (below), deletes the cache through vphoned, shuts the guest down, patches LLB and
+writes `gfx-res`, sized from the VM's own 3x size (kept in `gfx-res.3x`). By hand, delete that file (vphoned's
 `files.remove`, `force`) before shutting down, then:
+
+**iOS 27 also reads the device tree.** `cfw install` copies the board's `/product`
+`artwork-scale-factor` (3) into the guest's device tree, and iOS 27 takes the screen scale from it
+as well: with only LLB patched, a 2x VM still shows a 3x interface, zoomed in.
+`tools/guest-dt-scale.py CID [SCALE]` sets it (and any `/product/display*` `display-scale`) in the
+guest's Preboot `devicetree.img4` through vphoned, keeping the original in the guest
+(`devicetree.img4.before-scale`) and on the host (`runs/guest-dt-scale/`). `set-scale.sh` runs it.
+
+**iOS 27 does not go below 2x.** With LLB and the device tree both at 1, an iPhone Duo on iOS 27.1
+still reported `UIScreen.scale` 2 and drew a 2x interface on the 1x screen. 1x works on iOS 26.
+
+**The iPhone Duo: keep it at 3x for now.** At 2x with its own 466x678 points (932x1356) it shows its
+own layout, but its home screen takes every tap as the Control Center pull-down and ignores swipes
+(Control Center itself takes touches fine); at 3x everything works. At 2x with the width rounded up
+(`ALIGN32=1`, 960x1356) touch works, with the generic iPhone layout. Open bug: some Duo-only region
+of the home screen is sized for 3x.
 
 ```sh
 python3 tools/display-scale.py vms/myphone/nvram.bin        # show the current state
 python3 tools/display-scale.py vms/myphone/nvram.bin 1      # 1x (0 goes back to 3x)
-echo 448x932 > vms/myphone/gfx-res                          # matching display size
+echo 430x932 > vms/myphone/gfx-res                          # matching display size
 ```
 
 Measured on Settings scrolling with a quiet guest: 3x 36.6 frames/s average with about 50-60% vCPU load,
@@ -109,7 +126,12 @@ lock screen. `tools/guest-1x-logo.py CID` writes 1x versions, halved from the gu
 images (nothing is copied in from outside). Its system volume is read-only, so the tool first runs
 `/sbin/mount -u -w /` through a one-shot launchd job; the volume is read-only again after the next boot.
 
-**At 1x, keep the width a multiple of 32** (rows a multiple of 128 bytes). NVIDIA's linear images
+**Keep the points exact.** iOS picks a device's own layout by its screen size in points: the iPhone
+Duo at 480x678 points (960x1356, its 466-point width rounded up) got the generic iPhone status bar
+and navigation, and its own again at 466x678. `set-scale.sh` keeps the points exact.
+
+**Or round the width up to a multiple of 32** (`ALIGN32=1 tools/set-scale.sh ...`), for fewer GPU
+copies, if a few points of extra width do not matter for what you test. NVIDIA's linear images
 need 128-byte rows. At 430 pixels wide (1720-byte rows), iOS's full-screen surfaces were shadow-copied
 in and out, about 10 screens per frame; at 448 the runtime aliases them instead. Copies fell from
 about 246 million to 1.3 million texels per 30 s at idle.

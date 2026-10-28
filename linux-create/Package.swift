@@ -20,7 +20,7 @@ let package = Package(
         // The versions vphone-cli 2.9.4 pins (its Package.resolved files).
         .package(url: "https://github.com/apple/swift-crypto.git", exact: "3.15.1"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.3.1"),
-        .package(url: "https://github.com/p-x9/MachOKit.git", exact: "0.52.2"),
+        .package(url: "https://github.com/p-x9/MachOKit.git", exact: "0.55.0"),
         .package(url: "https://github.com/Lakr233/libcapstone-spm.git", exact: "0.1.3"),
     ],
     targets: [

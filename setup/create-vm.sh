@@ -281,6 +281,11 @@ true'
 
 do_cfw() {
   usb_helpers
+  # The SSH tools the ramdisk gets (dropbear, bash, sftp-server, ...): fetched once, pinned and
+  # checksummed (tools/ssh-ramdisk-stage.sh).
+  if [ "$DRY" = 1 ] || [ ! -e "$VSETUP_SRC/runs/sshramdisk/ssh-root/usr/local/bin/dropbear" ]; then
+    dry "$T/ssh-ramdisk-stage.sh"
+  fi
   dry bash "$T/ssh-ramdisk-rebuild-signed.sh" "$VSETUP_DEVICES" "$NAME"
   dry "$T/restore-tree-mode.sh" "$VSETUP_DEVICES" "$NAME" ssh
   dry python3 "$T/nvram-autoboot.py" "$VM/nvram.bin" --auto-boot false

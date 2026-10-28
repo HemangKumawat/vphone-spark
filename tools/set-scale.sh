@@ -6,9 +6,11 @@
 #   tools/set-scale.sh vms/myphone 3        # back to iOS's default 3x
 #
 # The display size follows the VM's own 3x size (its gfx-res, else 1290x2796), kept the first
-# time as gfx-res.3x: the same points at the new scale, the width rounded up to 32 pixels
-# (NVIDIA needs 128-byte rows). An iPhone 17 Pro Max is 448x932 at 1x and 896x1864 at 2x; the
-# iPhone Duo (1398x2034) is 960x1356 at 2x.
+# time as gfx-res.3x: exactly the same points at the new scale. An iPhone 17 Pro Max is 430x932 at
+# 1x and 860x1864 at 2x; the iPhone Duo (1398x2034) is 932x1356 at 2x. Keep the points exact: iOS
+# picks a device's own layout (the Duo's status bar and navigation) by its screen size in points,
+# and a wider screen gets the generic iPhone one. ALIGN32=1 rounds the width up to 32 pixels
+# instead (NVIDIA's 128-byte rows, fewer GPU copies), at the cost of a few points of width.
 #
 # 1. Sets the scale in the guest's own device tree through vphoned (tools/guest-dt-scale.py):
 #    `cfw install` copies the board's /product artwork-scale-factor into it, and iOS 27 takes the
@@ -43,7 +45,11 @@ IFS=x read -r W3 H3 < "$VM/gfx-res.3x"
 if [ "$SCALE" = 3 ]; then
   RES=${W3}x${H3}
 else
-  RES=$(( (W3 / 3 + 31) / 32 * 32 * SCALE ))x$(( H3 / 3 * SCALE ))
+  if [ "${ALIGN32:-0}" = 1 ]; then
+    RES=$(( (W3 / 3 + 31) / 32 * 32 * SCALE ))x$(( H3 / 3 * SCALE ))
+  else
+    RES=$(( W3 / 3 * SCALE ))x$(( H3 / 3 * SCALE ))
+  fi
 fi
 
 # The QEMU that has this VM's disk open (compared by inode, so a symlinked path still matches).

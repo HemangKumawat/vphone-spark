@@ -100,7 +100,7 @@ Then add the files vphone-linux reads that vphone-cli does not write:
 
 - **`serial`** (optional): the serial number Virtualization.framework reports for this machine.
   The recovery-mode USB serial string shows it as `SRNM:[...]`.
-- **`gfx-res`** (optional): the display size in pixels. `448x932` is the recommended size at 1x
+- **`gfx-res`** (optional): the display size in pixels. `430x932` is the size at 1x
   (see [ADVANCED.md](ADVANCED.md#display-scale)). The default is the bundle's `screenConfig`,
   1290x2796.
 

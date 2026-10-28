@@ -77,8 +77,8 @@ framebuffer with a lower UI scale gives the same 430x932-point layout with far f
 | Scale | `gfx-res` | Pixels vs 3x |
 |---|---|---|
 | 3x (default) | 1290x2796 | 1 |
-| 2x | 896x1864 (860 rounded up to a multiple of 32) | about 1/2.2 |
-| 1x | 448x932 (430x932 rounded up to a multiple of 32) | about 1/8.6 |
+| 2x | 860x1864 | about 1/2.2 |
+| 1x | 430x932 | about 1/9 |
 
 The scale comes from LLB, which fills `/chosen/display-scale` from the boot video settings.
 `tools/display-scale.py` patches that one instruction in the firmware store inside `nvram.bin`. This
@@ -103,12 +103,12 @@ guest's Preboot `devicetree.img4` through vphoned, keeping the original in the g
 
 **iOS 27 does not go below 2x.** With LLB and the device tree both at 1, an iPhone Duo on iOS 27.1
 still reported `UIScreen.scale` 2 and drew a 2x interface on the 1x screen. Use 2x there: the Duo
-(1398x2034 at 3x) runs at 960x1356, 480x678 points. 1x works on iOS 26.
+(1398x2034 at 3x) runs at 932x1356, its own 466x678 points. 1x works on iOS 26.
 
 ```sh
 python3 tools/display-scale.py vms/myphone/nvram.bin        # show the current state
 python3 tools/display-scale.py vms/myphone/nvram.bin 1      # 1x (0 goes back to 3x)
-echo 448x932 > vms/myphone/gfx-res                          # matching display size
+echo 430x932 > vms/myphone/gfx-res                          # matching display size
 ```
 
 Measured on Settings scrolling with a quiet guest: 3x 36.6 frames/s average with about 50-60% vCPU load,
@@ -121,7 +121,12 @@ lock screen. `tools/guest-1x-logo.py CID` writes 1x versions, halved from the gu
 images (nothing is copied in from outside). Its system volume is read-only, so the tool first runs
 `/sbin/mount -u -w /` through a one-shot launchd job; the volume is read-only again after the next boot.
 
-**At 1x, keep the width a multiple of 32** (rows a multiple of 128 bytes). NVIDIA's linear images
+**Keep the points exact.** iOS picks a device's own layout by its screen size in points: the iPhone
+Duo at 480x678 points (960x1356, its 466-point width rounded up) got the generic iPhone status bar
+and navigation, and its own again at 466x678. `set-scale.sh` keeps the points exact.
+
+**Or round the width up to a multiple of 32** (`ALIGN32=1 tools/set-scale.sh ...`), for fewer GPU
+copies, if a few points of extra width do not matter for what you test. NVIDIA's linear images
 need 128-byte rows. At 430 pixels wide (1720-byte rows), iOS's full-screen surfaces were shadow-copied
 in and out, about 10 screens per frame; at 448 the runtime aliases them instead. Copies fell from
 about 246 million to 1.3 million texels per 30 s at idle.

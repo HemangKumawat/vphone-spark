@@ -4,7 +4,7 @@ use std::fs;
 use std::io::{self, ErrorKind, Read, Write};
 use std::mem;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
@@ -33,7 +33,8 @@ impl Upstream {
         }
     }
 
-    /// Opens one connection to vphoned.
+    /// Opens one connection to vphoned. The socket is used only if this user owns it and its
+    /// directory, and the directory is writable by nobody else.
     ///
     /// An `AF_VSOCK` stream comes back as a [`UnixStream`]: its read, write, shutdown and
     /// `try_clone` are plain socket calls, so it carries either kind.
@@ -42,11 +43,26 @@ impl Upstream {
     ///
     /// [`Refusal::Unreachable`] saying which datapath failed and how.
     pub fn connect(&self) -> Result<UnixStream, Refusal> {
-        if fs::metadata(&self.uds).is_ok_and(|m| m.file_type().is_socket()) {
-            self.connect_uds()
-        } else {
-            self.connect_vsock()
+        let Ok(socket) = fs::symlink_metadata(&self.uds) else {
+            return self.connect_vsock();
+        };
+        // Anyone can create a file in a shared directory such as /tmp. A socket counts only when
+        // it and its directory are this user's and nobody else can write the directory; else
+        // another user could plant one and receive the phone's admitted requests.
+        // SAFETY: geteuid(2) takes no arguments and cannot fail.
+        let me = unsafe { libc::geteuid() };
+        let dir = self.uds.parent().and_then(|d| fs::symlink_metadata(d).ok());
+        let trusted = socket.file_type().is_socket()
+            && socket.uid() == me
+            && dir.is_some_and(|d| d.is_dir() && d.uid() == me && d.mode() & 0o022 == 0);
+        if !trusted {
+            return Err(Refusal::Unreachable(format!(
+                "{} not used: it and its directory must belong to uid {me}, and the directory must not be \
+                 group- or world-writable (another user may have put it there)",
+                self.uds.display()
+            )));
         }
+        self.connect_uds()
     }
 
     fn connect_uds(&self) -> Result<UnixStream, Refusal> {

@@ -382,3 +382,17 @@ fn a_refused_client_that_keeps_trickling_is_cut_off() {
     );
     trickle.join().unwrap();
 }
+
+#[test]
+fn a_socket_another_user_could_have_planted_is_not_used() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = vsock_dir();
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o777)).unwrap();
+    let _listener = UnixListener::bind(dir.join(format!("{CID}.sock"))).unwrap();
+    let ok = format!("GET /v1/health HTTP/1.1\r\nAuthorization: Bearer {TOKEN}\r\n\r\n");
+    let (answer, _) = exchange(&dir, ok.as_bytes());
+    assert!(
+        answer.starts_with("HTTP/1.1 502 Bad Gateway\r\n") && answer.contains("not used"),
+        "{answer}"
+    );
+}

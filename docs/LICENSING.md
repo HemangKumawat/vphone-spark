@@ -15,6 +15,13 @@ advice; each project's own license files are authoritative.
 
 ## Notes
 
+- **AGPL-3.0 source offer (vphone-spark).** The `qemu/` submodule contains AGPL-3.0 code. Its
+  complete corresponding source is the public repository
+  [YahiaAngelo/qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone) at the commit this
+  repository's `qemu` gitlink pins (`git submodule status qemu`; currently `4da65a9`). If vphone-spark
+  changes that code, the changed source is published with it before any binary or network service
+  built from it is offered. `reims-vgpu` (`ab0d0e0`) and `metal2vulkan` (`f77b2d7`) are pinned the
+  same way.
 - **The QEMU binary combines all three.** QEMU links `libreims_vgpu.a` (which contains metal2vulkan)
   statically. reims-vgpu and metal2vulkan may be used under GPL-2.0-or-later, and therefore under
   GPLv3, so they can be combined with qemu-vphone's GPL-3.0/AGPL-3.0 code. vphone-linux distributes

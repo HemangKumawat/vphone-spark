@@ -1,4 +1,27 @@
-# vphone-linux
+# vphone-spark
+
+A copy of [YahiaAngelo/vphone-linux](https://github.com/YahiaAngelo/vphone-linux) (based on commit
+`3678abe`, git remote `upstream`), being ported to an **NVIDIA DGX Spark** (GB10, Linux aarch64).
+
+> **Spark status: untested on Spark.** Nothing in this repository has been built or run on a DGX
+> Spark yet. Upstream vphone-linux supports only a Linux x86_64 host; everything below this box is
+> upstream's text and describes x86_64. The Spark port is work in progress.
+>
+> **App Store limit: no App Store, no Apple ID.** These are research VMs (Apple's `vresearch101`
+> platform). Signing in to the App Store or an Apple ID fails (vphone-cli issues
+> [#393](https://github.com/Lakr233/vphone-cli/issues/393),
+> [#326](https://github.com/Lakr233/vphone-cli/issues/326),
+> [#282](https://github.com/Lakr233/vphone-cli/issues/282)), and store apps such as Instagram and
+> TikTok crash at launch ([#212](https://github.com/Lakr233/vphone-cli/issues/212)). WhatsApp,
+> Instagram and other App Store apps cannot be installed. Only apps you build yourself (for example
+> with [xtool](https://github.com/xtool-org/xtool)) and sideload with `tools/install-ipa.py` run.
+>
+> **How many phones per Spark (estimate, untested on Spark).** Inferred from upstream's x86_64
+> measurements, not measured on a Spark: the guest runs under TCG emulation, so the 20 CPU cores are
+> the limit. Expect about 8 phones idling with one light app each, or about 4-6 in active use. The
+> 128 GB of memory alone would allow about 20 (about 6 GB per phone).
+
+## Upstream: vphone-linux
 
 Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **Linux x86_64 host**.
 
@@ -143,15 +166,15 @@ vphone-linux/
 ├── patches/               small patches for vphone-cli (Mac side)
 ├── docs/
 ├── qemu/                  submodule: qemu-vphone, branch vphone
-├── reims-vgpu/            submodule: reims-vgpu fork, branch vphone
-├── metal2vulkan/          submodule: metal2vulkan fork, branch vphone
+├── reims-vgpu/            submodule: reims-vgpu fork, branch vphone-next2
+├── metal2vulkan/          submodule: metal2vulkan fork, branch vphone-next2
 ├── vms/                   your VM bundles (ignored by git)
 └── runs/                  test-run output (ignored by git)
 ```
 
 The submodules are [qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone),
 [reims-vgpu](https://github.com/YahiaAngelo/reims-vgpu) and
-[metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan), each on its `vphone` branch.
+[metal2vulkan](https://github.com/YahiaAngelo/metal2vulkan), on the branches `.gitmodules` names (`vphone`, `vphone-next2`, `vphone-next2`).
 reims-vgpu's `Cargo.toml` takes metal2vulkan from `../metal2vulkan`, so the submodules must stay side by
 side as above. vphone-cli is not a submodule: on a Mac it
 runs from its own releases, and `linux-create/sync-sources.sh` builds its firmware tooling from a

@@ -37,3 +37,6 @@ setup/tmp/
 vphone-setup-work/
 opensshrd/
 sshramdisk/
+
+# OctoAlly session state (this fork's orchestration, never committed)
+.octoally-pro/

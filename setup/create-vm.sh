@@ -348,7 +348,8 @@ QEMU_PIDFILE=$VM/.qemu.pid
 running_vm() {
   local pid
   pid=$(cat "$QEMU_PIDFILE" 2>/dev/null) || return 1
-  [ -n "$pid" ] && tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "file=$VM/Disk.img" &&
+  [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ] &&
+    tr '\0' '\n' < "/proc/$pid/cmdline" | grep -q "file=$VM/Disk.img" &&
     QEMU_PID=$pid
 }
 boot_vm() {

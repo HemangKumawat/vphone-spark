@@ -133,7 +133,11 @@ pub(crate) fn read_message(mut r: impl Read) -> io::Result<(u8, Vec<u8>)> {
             n => u64::from(n),
         };
         let len = usize::try_from(len).map_err(|_| too_big())?;
-        if message.len() + len > MESSAGE_MAX {
+        if message
+            .len()
+            .checked_add(len)
+            .is_none_or(|n| n > MESSAGE_MAX)
+        {
             return Err(too_big());
         }
         let mut mask = [0u8; 4];

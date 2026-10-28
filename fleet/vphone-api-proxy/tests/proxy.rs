@@ -25,8 +25,29 @@ fn head(text: &str) -> Head {
     Head::parse(text.as_bytes()).expect("a valid head")
 }
 
-/// A fresh, empty vsock dir for one test.
-fn vsock_dir() -> PathBuf {
+/// A fresh, empty vsock dir for one test, removed when dropped: pass or fail, /tmp keeps nothing.
+struct TempDir(PathBuf);
+
+impl std::ops::Deref for TempDir {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for TempDir {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn vsock_dir() -> TempDir {
     static N: AtomicU32 = AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
         "vphone-api-proxy-{}-{}",
@@ -35,7 +56,17 @@ fn vsock_dir() -> PathBuf {
     ));
     fs::remove_dir_all(&dir).ok();
     fs::create_dir_all(&dir).unwrap();
-    dir
+    TempDir(dir)
+}
+
+/// A child process killed and reaped when dropped, so none outlives a failing test.
+struct Reaped(std::process::Child);
+
+impl Drop for Reaped {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 /// A fake vphoned behind QEMU's hybrid vsock: answers `CONNECT 1339` with `OK`, then echoes
@@ -408,31 +439,36 @@ fn a_closed_log_pipe_does_not_stop_the_proxy() {
         .unwrap()
         .port();
     let activity = dir.join("activity");
-    let mut proxy = Command::new(env!("CARGO_BIN_EXE_vphone-api-proxy"))
-        .args([
-            "--listen",
-            &format!("127.0.0.1:{port}"),
-            "--cid",
-            &CID.to_string(),
-        ])
-        .arg("--vsock-dir")
-        .arg(&dir)
-        .arg("--activity")
-        .arg(&activity)
-        .arg("--verbose")
-        .env("VPHONE_API_TOKEN", TOKEN)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut proxy = Reaped(
+        Command::new(env!("CARGO_BIN_EXE_vphone-api-proxy"))
+            .args([
+                "--listen",
+                &format!("127.0.0.1:{port}"),
+                "--cid",
+                &CID.to_string(),
+            ])
+            .arg("--vsock-dir")
+            .arg(&*dir)
+            .arg("--activity")
+            .arg(&activity)
+            .arg("--verbose")
+            .env("VPHONE_API_TOKEN", TOKEN)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
     // Close the read end before the proxy logs anything: every log line then meets EPIPE.
-    drop(proxy.stderr.take());
+    drop(proxy.0.stderr.take());
     let started = Instant::now();
     let mut client = loop {
         match TcpStream::connect(("127.0.0.1", port)) {
             Ok(c) => break c,
             Err(e) => {
-                assert!(proxy.try_wait().unwrap().is_none(), "the proxy exited: {e}");
+                assert!(
+                    proxy.0.try_wait().unwrap().is_none(),
+                    "the proxy exited: {e}"
+                );
                 assert!(started.elapsed() < Duration::from_secs(10), "{e}");
                 thread::sleep(Duration::from_millis(50));
             }
@@ -453,10 +489,9 @@ fn a_closed_log_pipe_does_not_stop_the_proxy() {
     // The verbose line for that connection was written after the answer: still alive after it.
     thread::sleep(Duration::from_millis(300));
     assert!(
-        proxy.try_wait().unwrap().is_none(),
+        proxy.0.try_wait().unwrap().is_none(),
         "the proxy died after logging"
     );
     assert!(activity.exists(), "--activity was not created");
-    proxy.kill().unwrap();
-    proxy.wait().unwrap();
+    drop(proxy);
 }

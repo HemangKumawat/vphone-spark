@@ -4,10 +4,10 @@ use std::cell::Cell;
 use std::fs::File;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::*;
+use crate::tests::{Reaped, TempDir};
 
 thread_local! {
     static NOW: Cell<u64> = const { Cell::new(0) };
@@ -36,15 +36,10 @@ impl Phone {
     }
 }
 
-/// A fleet in a fresh temp folder, on the injected clock.
-fn fleet() -> Fleet {
-    static N: AtomicU32 = AtomicU32::new(0);
-    let root = std::env::temp_dir().join(format!(
-        "vphone-fleet-{}-{}",
-        std::process::id(),
-        N.fetch_add(1, Ordering::Relaxed)
-    ));
-    let _ = fs::remove_dir_all(&root);
+/// A fleet in a fresh temp folder (removed when the guard drops), on the injected clock.
+fn fleet() -> (Fleet, TempDir) {
+    let dir = TempDir::new("vphone-fleet");
+    let root = dir.to_path_buf();
     let paths = Paths {
         fleet: root.join("vms"),
         runs: root.join("runs"),
@@ -58,7 +53,7 @@ fn fleet() -> Fleet {
     let mut f = Fleet::new(paths, config);
     f.clock = now;
     f.vsock_dir = f.paths.root.join("vsock");
-    f
+    (f, dir)
 }
 
 /// A running phone `id` (this test process stands in for its QEMU), used at the current time.
@@ -97,7 +92,7 @@ fn eventually(path: &Path) -> String {
 
 #[test]
 fn active_idle_parked_and_awake_again() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     let a = phone(&mut f, "A");
     f.tick();
@@ -133,7 +128,7 @@ fn active_idle_parked_and_awake_again() {
 
 #[test]
 fn past_max_awake_the_least_recently_used_is_parked() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     f.config.tunables.max_awake = 1;
     at(0);
     let a = phone(&mut f, "A");
@@ -149,7 +144,7 @@ fn past_max_awake_the_least_recently_used_is_parked() {
 
 #[test]
 fn a_connection_to_its_api_wakes_a_parked_phone() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     let a = phone(&mut f, "A");
     let activity = f.paths.run("A").join("activity");
@@ -169,7 +164,7 @@ fn a_connection_to_its_api_wakes_a_parked_phone() {
 
 #[test]
 fn parking_off_through_the_api_resumes_parked_phones_and_parks_no_more() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     let a = phone(&mut f, "A");
     at(300);
@@ -193,7 +188,7 @@ fn parking_off_through_the_api_resumes_parked_phones_and_parks_no_more() {
 
 #[test]
 fn cpu_priority_off_puts_every_phone_back_to_the_default_weight() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     let a = phone(&mut f, "A");
     f.set_power("A", Power::Active);
@@ -209,7 +204,7 @@ fn cpu_priority_off_puts_every_phone_back_to_the_default_weight() {
 
 #[test]
 fn a_phone_stopped_elsewhere_is_forgotten() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     phone(&mut f, "A");
     fs::remove_file(f.paths.run("A").join("pid")).unwrap();
@@ -219,7 +214,7 @@ fn a_phone_stopped_elsewhere_is_forgotten() {
 
 #[test]
 fn a_phone_started_elsewhere_is_adopted_not_launched_again() {
-    let mut f = fleet();
+    let (mut f, _dir) = fleet();
     at(0);
     phone(&mut f, "A");
     let dir = f.paths.phone("A");
@@ -233,11 +228,13 @@ fn a_phone_started_elsewhere_is_adopted_not_launched_again() {
     let mut dead = Command::new("true").spawn().unwrap();
     dead.wait().unwrap();
     f.phones.get_mut("A").unwrap().pid = i32::try_from(dead.id()).unwrap();
-    let mut other = Command::new("sh")
-        .args(["-c", "sleep 30; :", "phone-A"]) // `; :` keeps sh: dash execs a lone command
-        .spawn()
-        .unwrap();
-    let pid = i32::try_from(other.id()).unwrap();
+    let other = Reaped(
+        Command::new("sh")
+            .args(["-c", "sleep 30; :", "phone-A"]) // `; :` keeps sh: dash execs a lone command
+            .spawn()
+            .unwrap(),
+    );
+    let pid = i32::try_from(other.0.id()).unwrap();
     fs::write(f.paths.run("A").join("pid"), pid.to_string()).unwrap();
     // spawn() can return while the child is still in execve, its cmdline not yet set.
     for _ in 0..100 {
@@ -249,7 +246,6 @@ fn a_phone_started_elsewhere_is_adopted_not_launched_again() {
     at(1000);
     f.tick();
     let tracked = f.phones["A"].pid;
-    other.kill().unwrap();
-    other.wait().unwrap();
+    drop(other);
     assert_eq!(tracked, pid, "the running phone is adopted, not restarted");
 }

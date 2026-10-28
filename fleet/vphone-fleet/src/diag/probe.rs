@@ -187,7 +187,8 @@ mod tests {
 
     #[test]
     fn extents_count_a_written_file() {
-        let f = std::env::temp_dir().join(format!("vphone-fiemap-{}", std::process::id()));
+        let dir = crate::tests::TempDir::new("vphone-fiemap");
+        let f = dir.join("file");
         fs::write(&f, vec![7u8; 1 << 16]).unwrap();
         File::open(&f).unwrap().sync_all().unwrap();
         // tmpfs has no FIEMAP: only a real filesystem answers.
@@ -195,6 +196,5 @@ mod tests {
             assert!(total >= 1 << 16, "{total}");
             assert_eq!(shared, 0);
         }
-        fs::remove_file(&f).unwrap();
     }
 }

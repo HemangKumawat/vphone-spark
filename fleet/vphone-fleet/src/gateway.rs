@@ -63,6 +63,8 @@ pub(crate) fn forward(
     }
     let upstream = wake_for_use(fleet, id)?;
     head.set_target(rest);
+    // The fleet token opens every phone: a guest never sees it, not even as a subprotocol.
+    head.strip_token_protocols();
     let guest = upstream.connect().map_err(|r| (502, r.to_string()))?;
     if let Err(e) = copy_both_ways(client, &guest, &head, early) {
         log!(

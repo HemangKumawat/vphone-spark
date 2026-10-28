@@ -31,6 +31,52 @@ const TOKEN: &str = "test-token-0123456789abcdef";
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nfake-frame";
 const JPEG: &[u8] = b"\xff\xd8\xff\xe0fake-jpeg";
 
+/// A test's temp folder, removed when dropped: a passing or failing test leaves nothing in /tmp.
+pub(crate) struct TempDir(PathBuf);
+
+impl TempDir {
+    pub(crate) fn new(prefix: &str) -> Self {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "{prefix}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+}
+
+impl std::ops::Deref for TempDir {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for TempDir {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A child process killed and reaped when dropped, so none outlives a failing test.
+pub(crate) struct Reaped(pub(crate) std::process::Child);
+
+impl Drop for Reaped {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// A QMP server recording each command line but `qmp_capabilities`; `screendump` writes a PNG.
 pub(crate) fn fake_qmp(socket: &Path) -> Arc<Mutex<Vec<String>>> {
     let log = Arc::new(Mutex::new(Vec::new()));
@@ -158,6 +204,7 @@ struct Phone {
 }
 
 struct Env {
+    _dir: TempDir,
     root: PathBuf,
     fleet: &'static Mutex<Fleet>,
     addr: String,
@@ -167,13 +214,8 @@ struct Env {
 impl Env {
     /// A server over phones `ids` (cids 10, 11, ...), each running and healthy.
     fn new(ids: &[&str]) -> Self {
-        static N: AtomicU32 = AtomicU32::new(0);
-        let root = std::env::temp_dir().join(format!(
-            "vphone-e2e-{}-{}",
-            std::process::id(),
-            N.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = fs::remove_dir_all(&root);
+        let dir = TempDir::new("vphone-e2e");
+        let root = dir.to_path_buf();
         let paths = Paths {
             fleet: root.join("vms"),
             runs: root.join("runs"),
@@ -212,6 +254,7 @@ impl Env {
         let addr = listener.local_addr().unwrap().to_string();
         thread::spawn(move || crate::server::accept(&listener, fleet, token));
         Self {
+            _dir: dir,
             root,
             fleet,
             addr,
@@ -267,6 +310,13 @@ fn the_gateway_reaches_each_phone_by_id_without_the_token() {
         assert_eq!(body["host"], "localhost");
         assert_eq!(body["authorization"], Value::Null, "the token is stripped");
     }
+    let answer = env.raw(&format!("GET /phones/B/v1/health HTTP/1.1\r\nHost: x\r\nSec-WebSocket-Protocol: vphone-token.{TOKEN}, chat\r\n\r\n"));
+    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+    let heads = env.phones[1].heads.lock().unwrap();
+    let last = heads.last().unwrap();
+    assert!(!last.contains(TOKEN), "the token reached the guest: {last}");
+    assert!(last.contains("Sec-WebSocket-Protocol: chat"), "{last}");
+    drop(heads);
     let (code, body) = env.json("POST", "/phones/A/v1/rpc", "{\"method\":\"apps.list\"}");
     assert_eq!(
         (code, body["body"].as_str()),

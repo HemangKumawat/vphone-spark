@@ -214,12 +214,19 @@ fn call(client: &Client, name: &str, args: &Value) -> Value {
         "type_text" => input(json!({ "action": "text", "text": arg("text") })),
         "press_home" => input(json!({ "action": "home" })),
         "install_app" => {
-            let ipa = std::path::Path::new(arg("ipa"));
-            let Some(file) = ipa.file_name().and_then(|f| f.to_str()) else {
+            // Only an app archive: the tool must not carry any other host file into a phone,
+            // where read_file would hand it to the agent. Checked after symlinks resolve.
+            let ipa = match std::fs::canonicalize(arg("ipa")) {
+                Ok(p) => p,
+                Err(e) => return error(&format!("ipa {}: {e}", arg("ipa"))),
+            };
+            let is_app = ipa.extension().is_some_and(|e| e == "ipa" || e == "tipa");
+            let Some(file) = ipa.file_name().and_then(|f| f.to_str()).filter(|_| is_app) else {
                 return error("ipa: a path to an .ipa or .tipa file on this host");
             };
-            let bytes = match std::fs::read(ipa) {
-                Ok(b) => b,
+            let bytes = match std::fs::read(&ipa) {
+                Ok(b) if b.starts_with(b"PK\x03\x04") => b,
+                Ok(_) => return error(&format!("{}: not an app archive (a zip)", ipa.display())),
                 Err(e) => return error(&format!("{}: {e}", ipa.display())),
             };
             let guest = format!("{GUEST_DROP}/vphone-fleet-{file}");

@@ -163,6 +163,24 @@ impl Head {
     }
 
     /// Replaces the request target, as a router does when it strips its own prefix.
+    /// Drops every `vphone-token.*` subprotocol, and the header when none is left: for a gateway
+    /// whose token must not reach the guest (`admit` leaves them for vphoned to select).
+    pub fn strip_token_protocols(&mut self) {
+        for (name, value) in &mut self.headers {
+            if name.eq_ignore_ascii_case("sec-websocket-protocol") {
+                let kept: Vec<&str> = value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty() && !p.starts_with("vphone-token."))
+                    .collect();
+                *value = kept.join(", ");
+            }
+        }
+        self.headers.retain(|(name, value)| {
+            !(name.eq_ignore_ascii_case("sec-websocket-protocol") && value.is_empty())
+        });
+    }
+
     pub fn set_target(&mut self, target: String) {
         self.target = target;
     }

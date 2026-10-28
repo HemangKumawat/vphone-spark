@@ -93,9 +93,12 @@ fn mcp_initialize_list_and_call_over_stdio() {
         json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
         json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_phones", "arguments": {}}}),
+        json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "install_app", "arguments": {"phone": "A", "ipa": env.root.join("config/profiles.toml")}}}),
+        json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "install_app", "arguments": {"phone": "A", "ipa": env.root.join("secret.ipa")}}}),
     ]
     .map(|m| m.to_string())
     .join("\n");
+    fs::write(env.root.join("secret.ipa"), "not a zip").unwrap();
     let mut out = Vec::new();
     mcp::run(input.as_bytes(), &mut out, &env.client()).unwrap();
     let replies: Vec<Value> = String::from_utf8(out)
@@ -105,7 +108,7 @@ fn mcp_initialize_list_and_call_over_stdio() {
         .collect();
     assert_eq!(
         replies.len(),
-        3,
+        5,
         "a notification gets no reply: {replies:?}"
     );
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
@@ -140,6 +143,21 @@ fn mcp_initialize_list_and_call_over_stdio() {
         .map(|p| p["id"].as_str().unwrap())
         .collect();
     assert_eq!(ids, ["A", "B", "C"]);
+    for r in &replies[3..] {
+        assert_eq!(
+            r["result"]["isError"], true,
+            "only an app archive is uploaded: {r}"
+        );
+    }
+    assert!(
+        env.phones[0]
+            .heads
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|h| !h.starts_with("PUT")),
+        "nothing was uploaded"
+    );
 }
 
 #[test]

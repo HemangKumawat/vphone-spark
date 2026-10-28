@@ -14,14 +14,15 @@ set -Eeuo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 DEVICE=${DEVICE:-} IOS=${IOS:-} CLOUDOS_PICK=${CLOUDOS_PICK:-}
-SCALE=${SCALE:-1} NAME=${NAME:-} DRY=0 LIST=0
+SCALE=${SCALE:-1} NAME=${NAME:-} DRY=0 LIST=0 CID=${CID:-3}
 while [ $# -gt 0 ]; do
   case $1 in
     --device)  DEVICE=$2; shift ;;
     --ios)     IOS=$2; shift ;;
     --cloudos) CLOUDOS_PICK=$2; shift ;;
     --name)    NAME=$2; shift ;;
-    --scale)   SCALE=$2; shift ;;   # display scale: 1 (default) | 2 | 3
+    --scale)   SCALE=$2; shift ;;   # display scale: 1 (default; 2 on iOS 27) | 2 | 3
+    --cid)     CID=$2; shift ;;     # the VM's vsock CID (default 3; another VM may hold it)
     --dry-run) DRY=1 ;;
     --list)    LIST=1 ;;
     -y)        export VSETUP_ASSUME_YES=1 ;;
@@ -101,110 +102,121 @@ NAME=${NAME:-vphone-${DEVICE//,/-}-${IOS//./}}
 VM=$VSETUP_DEVICES/$NAME
 STATE=$VM/.create-state
 [ "$DRY" = 1 ] || mkdir -p "$VM"
-done_step() { grep -qxs "^$1$" "$STATE" 2>/dev/null; }
-dry() { if [ "$DRY" = 1 ]; then printf '   \033[2m[dry-run]\033[0m %s\n' "$*"; else
-        # shellcheck disable=SC2016  # the point is to show the raw command
-        echo '+ '"$*"' (not executed in a dry run)' >&2; "$@"; fi; }
-mark() { # record a finished step; the VM dir may not exist yet at mark time
-  [ "$DRY" = 1 ] || { mkdir -p "$VM"; printf '%s\n' "$1" >> "$STATE"; }
+
+# iOS 27 does not go below 2x (docs/ADVANCED.md "Display scale").
+case $IOS in
+  27.*) if [ "$SCALE" = 1 ]; then warn "iOS 27 does not go below 2x: using --scale 2"; SCALE=2; fi ;;
+esac
+
+done_step() { grep -qxs "$1" "$STATE"; }
+# Run a command, or only print it in a dry run.
+dry() {
+  if [ "$DRY" = 1 ]; then printf '   \033[2m[dry-run]\033[0m %s\n' "$*"
+  else printf '\033[2m+ %s\033[0m\n' "$*" >&2; "$@"; fi
 }
-step() { local key=$1; shift
+mark() { [ "$DRY" = 1 ] || printf '%s\n' "$1" >> "$STATE"; }
+# step KEY FUNCTION: run FUNCTION unless KEY is recorded, then record KEY. Not run as an `if`
+# condition, so `set -e` stays in force inside FUNCTION: a failing command ends the run before
+# the step is recorded, and the ERR trap names the step to resume from.
+CURRENT_STEP=
+trap '[ -n "$CURRENT_STEP" ] && printf "\033[1;31mERROR\033[0m step %s failed (fix it, then re-run to resume)\n" "$CURRENT_STEP" >&2' ERR
+step() {
+  local key=$1; shift
   if done_step "$key"; then log "  • $key  (already done)"; return 0; fi
   log "▶ $key"
-  if "$@"; then mark "$key"; else die "step $key failed (fix it, then re-run to resume)"; fi
+  CURRENT_STEP=$key
+  "$@"
+  CURRENT_STEP=
+  mark "$key"
 }
 
 log "Device:  $DEVICE ($DEVICE_NAME)"
 log "iOS:     $IOS (build $PAIR_BUILD)   cloudOS: $PAIR_CLOUDOS   preset: $PAIR_PRESET"
 [ -n "${PAIR_NOTE:-}" ] && log "Note:    $PAIR_NOTE"
-log "VM:      $VM"
+log "VM:      $VM   (scale ${SCALE}x, vsock CID $CID)"
 [ "$DRY" = 1 ] && log "DRY RUN: nothing below executes."
 
 VC=$VSETUP_SRC/linux-create/.build/out/out/Products/Debug-linux-x86_64/vphone-cli
 QEMU_RUN=$VSETUP_SRC/run-vphone.sh
+T=$VSETUP_SRC/tools
+ECID=$(cat "$VM/ecid" 2>/dev/null || echo 0x0)
+CACHE=$HOME/.cache/vphone
 
-step sanity && {
+do_sanity() {
   if [ "$DRY" = 1 ]; then
-    log "   (dry-run: binaries appear when ./setup.sh has run — skipping checks)"
-  else
-    local_missing=0
-    for one in "$VC" "$QEMU_RUN" \
-               "$VSETUP_SRC/OpenAVB/OpenAVB.bin" "$VSETUP_SRC/OpenSEP/OpenSEP.bin"; do
-      [ -e "$one" ] || { warn "missing: $one — run ./setup.sh first"; local_missing=1; }
-    done
-    [ "$local_missing" = 0 ]
+    log "   (dry-run: binaries appear when ./setup.sh has run — skipping checks)"; return 0
   fi
+  local one missing=0
+  for one in "$VC" "$QEMU_RUN" "$VSETUP_SRC/OpenAVB/OpenAVB.bin" "$VSETUP_SRC/OpenSEP/OpenSEP.bin"; do
+    [ -e "$one" ] || { warn "missing: $one — run ./setup.sh first"; missing=1; }
+  done
+  [ "$missing" = 0 ]
 }
 
-step bundle && {
+do_bundle() {
   dry python3 "$VSETUP_ROOT/lib/make-bundle.py" "$VM" "$DEVICE" "$SCALE"
   dry cp "$VSETUP_SRC/OpenAVB/OpenAVB.bin" "$VM/OpenAVB.bin"
   dry cp "$VSETUP_SRC/OpenSEP/OpenSEP.bin" "$VM/OpenSEP.bin"
+  ECID=$(cat "$VM/ecid" 2>/dev/null || echo 0x0)
 }
 
-# Download the firmware the pairing names: iOS restore + the cloudOS image.
-# vphone-cli's fw catalog resolves the CDN URLs (and its own cloudOS for a
-# research-board pairing); files land in ~/.cache/vphone and are reused.
-WANT_IOS=${IPSW_URL:-}   # a URL given on the command line skips the resolver
-step firmware && {
-  cache="$HOME/.cache/vphone"
-  [ "$DRY" = 1 ] || mkdir -p "$cache"
-  if [ -n "$WANT_IOS" ]; then
-    IOS_URL=$WANT_IOS IOS_FILE=${IPSW_PATH:-$(basename "$WANT_IOS")}
-  elif [ ! -x "$VC" ]; then
-    # ./setup.sh has not built vphone-cli yet, so the fw catalog is not
-    # available. Skip cleanly; IPSW_URL=/CLOUDOS_URL= can still fetch.
-    log "  (vphone-cli not built: firmware resolution skipped)"
-    IOS_FILE=$PAIR_IPSW IOS_URL='' CLOUD_FILE='' CLOUDOS_LOCAL=''
+# The firmware the pairing names: the iOS restore and the cloudOS image, resolved by
+# vphone-cli's fw catalog (IPSW_URL=/CLOUDOS_IPSW_URL= override it). Files land in
+# ~/.cache/vphone and are reused. Resolved on every run (prepare needs the paths); a download
+# happens only for a file that is not there yet.
+resolve_firmware() {
+  IOS_LOCAL='' CLOUDOS_LOCAL=''
+  local ios_file='' ios_url='' cloud_file='' cloud_url='' resolved
+  if [ -n "${IPSW_URL:-}" ]; then
+    ios_url=$IPSW_URL ios_file=$(basename "$IPSW_URL")
+  elif [ -x "$VC" ]; then
+    resolved=$(python3 "$VSETUP_ROOT/lib/get-firmware.py" "$VC" "$DEVICE" "$IOS" "$PAIR_CLOUDOS") ||
+      die "fw catalog has no pairing for $DEVICE $IOS — pass IPSW_URL= and CLOUDOS_IPSW_URL="
+    IFS=$'\t' read -r ios_file ios_url <<< "$(printf '%s\n' "$resolved" | sed -n 1p)"
+    IFS=$'\t' read -r cloud_file cloud_url <<< "$(printf '%s\n' "$resolved" | sed -n 2p)"
   else
-    resolved=$(python3 "$VSETUP_ROOT/lib/get-firmware.py" "$VC" "$DEVICE" \
-               "$IOS" "$PAIR_CLOUDOS") ||
-      die "fw catalog has no pairing for $DEVICE $IOS — pass IPSW_URL= and CLOUDOS_URL="
-    IFS=$'\t' read -r IOS_FILE IOS_URL <<< "$(echo "$resolved" | head -1)"
-    IFS=$'\t' read -r CLOUD_FILE CLOUD_URL <<< "$(echo "$resolved" | sed -n 2p)"
-    [ "${CLOUDOS_IPSW_URL:-}" ] && CLOUD_URL=$CLOUDOS_IPSW_URL CLOUD_FILE=$(basename "$CLOUD_URL")
-    [ -s "$cache/$CLOUD_FILE" ] || dry curl -L --retry 3 -o "$cache/$CLOUD_FILE" "$CLOUD_URL"
+    log "  (vphone-cli not built: firmware resolution skipped)"
+    ios_file=$PAIR_IPSW
   fi
-  IOS_LOCAL=$cache/$IOS_FILE
-  if [ -n "${IOS_URL:-}" ]; then
-    [ -s "$IOS_LOCAL" ] || dry curl -L --retry 3 -o "$IOS_LOCAL" "$IOS_URL"
+  if [ -n "${CLOUDOS_IPSW_URL:-}" ]; then
+    cloud_url=$CLOUDOS_IPSW_URL cloud_file=$(basename "$CLOUDOS_IPSW_URL")
   fi
-  # cloudOS for `-c` — the resolver's file (or the caller's URL)
-  CLOUDOS_LOCAL=${CLOUD_FILE:+$cache/$CLOUD_FILE}
-  log "  firmware: $IOS_FILE + $CLOUD_FILE (or the given URLs) under $cache"
+  IOS_LOCAL=${IPSW_PATH:-$CACHE/$ios_file}
+  CLOUDOS_LOCAL=${cloud_file:+$CACHE/$cloud_file}
+  IOS_URL=$ios_url CLOUD_URL=$cloud_url
+}
+resolve_firmware
+
+do_firmware() {
+  [ "$DRY" = 1 ] || mkdir -p "$CACHE"
+  if [ -n "$CLOUD_URL" ] && [ ! -s "$CLOUDOS_LOCAL" ]; then
+    dry curl -L --retry 3 -o "$CLOUDOS_LOCAL" "$CLOUD_URL"
+  fi
+  if [ -n "$IOS_URL" ] && [ ! -s "$IOS_LOCAL" ]; then
+    dry curl -L --retry 3 -o "$IOS_LOCAL" "$IOS_URL"
+  fi
+  log "  firmware: $IOS_LOCAL + ${CLOUDOS_LOCAL:-cloudOS $PAIR_CLOUDOS}"
 }
 
-step prepare && {
-  # The GPU driver's cryptex keys are not public (Apple answers 403 for the
-  # 23E5207q), so it has to come from a stock cloudOS restore. Look in the
-  # usual places before giving up; GPU_DRIVER_BUNDLE= wins always.
-  gpu_bundle=${GPU_DRIVER_BUNDLE:-}
+do_prepare() {
+  # The GPU driver's cryptex keys are not public (Apple answers 403 for the 23E5207q), so it
+  # comes from a stock cloudOS restore. Look in the usual places; GPU_DRIVER_BUNDLE= wins.
+  local gpu_bundle=${GPU_DRIVER_BUNDLE:-} cand
   if [ -z "$gpu_bundle" ]; then
     for cand in "$VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle" \
-                "$HOME/.cache/vphone/AppleParavirtGPUMetalIOGPUFamily.bundle"; do
+                "$CACHE/AppleParavirtGPUMetalIOGPUFamily.bundle"; do
       [ -d "$cand" ] && { gpu_bundle=$cand; break; }
     done
-    if [ -z "$gpu_bundle" ]; then
-      # last resort: one extracted tree under $HOME (not a guest dir)
-      gpu_bundle=$(find "$HOME" -maxdepth 4 -type d \
-        -name AppleParavirtGPUMetalIOGPUFamily.bundle -print -quit 2>/dev/null)
-      [ -n "$gpu_bundle" ] && log "Found the GPU driver bundle at $gpu_bundle"
-    fi
   fi
   [ "$DRY" = 1 ] || [ -d "$gpu_bundle" ] || die "GPU driver bundle not found (SETUP.md §5.4). Do one of:
-     • restore the stock cloudOS $PAIR_CLOUDOS into a scratch bundle once and
-       7zip-extract AppleParavirtGPUMetalIOGPUFamily.bundle from its System volume,
-     • or fetch one from this release's GPU-driver note and copy it to
-       $VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle,
+     • sudo $T/gpu-driver-from-cloudos.sh (restores a stock cloudOS once and extracts it),
+     • or copy one to $VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle,
      • or set GPU_DRIVER_BUNDLE=/path/to/AppleParavirtGPUMetalIOGPUFamily.bundle"
-  local_ipsw="${IPSW_PATH:-$IOS_LOCAL}"   # from the firmware step
-  cloud_arg="${CLOUDOS_LOCAL:-${CLOUDOS_IPSW_URL:-$PAIR_CLOUDOS}}"
   dry "$VC" fw prepare -l "$VSETUP_DEVICES" "$NAME" \
-      -i "${IPSW_URL:-$local_ipsw}" -c "$cloud_arg" \
+      -i "${IPSW_URL:-$IOS_LOCAL}" -c "${CLOUDOS_LOCAL:-$PAIR_CLOUDOS}" \
       --gpu-driver-bundle "$gpu_bundle"
-  # iOS 27 pairings need the seal patcher, which mounts the restore ramdisk
-  # read-write through linux-apfs-rw (root), and the txm-boot-precheck. The
-  # patch command runs under sudo for them; a 26.x pairing patches as the user.
+  # iOS 27 pairings need the seal patcher, which mounts the restore ramdisk read-write through
+  # linux-apfs-rw (root), and the TXM boot pre-check. A 26.x pairing patches as the user.
   case $IOS in
     27.*)
       dry sudo sh -c "modprobe apfs 2>/dev/null || insmod $VSETUP_SRC/.build/linux-apfs-rw/apfs.ko" || true
@@ -214,73 +226,145 @@ step prepare && {
   esac
 }
 
-step restore && {
-  dry sudo "$VSETUP_SRC/tools/usbmuxd-32k.sh"      # stops the system usbmuxd only
-  dry sudo "$VSETUP_SRC/tools/usbip-autoattach.sh"
-  dry "$VSETUP_SRC/tools/dfu-up.sh" "$VM" "$VM/.runs-dfu"
-  dry "$VC" recovery-probe
-  ECID_SHOWN=$(cat "$VM/ecid" 2>/dev/null || echo 0x0)
-  dry env VPHONE_RESTORE_TIMEOUT_SCALE=10 "$VC" restore \
-      -l "$VSETUP_DEVICES" "$NAME" --ecid "$ECID_SHOWN" -v
-}
-
-step cfw && {
-  dry bash "$VSETUP_SRC/tools/ssh-ramdisk-rebuild-signed.sh"
-  dry "$VSETUP_SRC/tools/restore-tree-mode.sh" "$VM" ssh
-  dry python3 "$VSETUP_SRC/tools/nvram-autoboot.py" "$VM/nvram.bin" --auto-boot false
-  dry "$VSETUP_SRC/tools/dfu-up.sh" "$VM" "$VM/.runs-sshrd"
-  dry env VPHONE_RESTORE_TIMEOUT_SCALE=10 VPHONE_RESTORE_BOOT_ARGS_EXTRA="serial=3" \
-      "$VC" restore -l "$VSETUP_DEVICES" "$NAME" \
-      --ecid "${ECID_SHOWN:-0x0}" --boot-ramdisk -v
-  dry "$VSETUP_SRC/tools/ssh-ramdisk.sh" 'id'
-  # A previous install (or update) renamed the gigalocker to AA.gl; the
-  # ramdisk's own seputil looks for the UUID-named one and its failure panics
-  # the guest seconds into mount_filesystems. Rename it back first.
-  # (The single quotes are the point: the whole script runs in the guest.)
-  # shellcheck disable=SC2016
-  dry "$VSETUP_SRC/tools/ssh-ramdisk.sh" \
-      'for n in 3 4 5 6 7; do t=$(/System/Library/Filesystems/apfs.fs/apfs.util -p /dev/disk1s$n 2>/dev/null); [ "$t" = "xART" ] && /sbin/mount_apfs /dev/disk1s$n /mnt7 2>/dev/null; done; [ -f /mnt7/AA.gl ] && mv /mnt7/AA.gl /mnt7/512E2CD6-BF8C-5D47-86CC-013714874FB4.gl; true'
-  dry "$VSETUP_SRC/tools/ssh-ramdisk.sh" \
-      '/bin/bash /usr/bin/mount_filesystems; /sbin/mount'
-  dry sudo "$VC" cfw install -l "$VSETUP_DEVICES" "$NAME" \
-      --work-parent /var/tmp --keep-artifacts
-  dry "$VSETUP_SRC/tools/ssh-ramdisk.sh" \
-      'sync; /sbin/umount /mnt2; /sbin/umount /mnt6; /sbin/umount /mnt1; sync'
-  # 2.13 moved the snapshot flip under cfw and it takes the Disk.img path.
-  dry "$VC" cfw flip-snapshot "$VM/Disk.img"
-  dry python3 "$VSETUP_SRC/tools/nvram-autoboot.py" "$VM/nvram.bin" --auto-boot true
-  dry "$VSETUP_SRC/tools/restore-tree-mode.sh" "$VM" full
-  dry python3 "$VSETUP_SRC/tools/display-scale.py" "$VM/nvram.bin" "$SCALE"
-}
-
-# Last step — the only place QEMU is started: once, in the background, for THIS
-# VM alone. Nothing ever kills or signals a VM.
-if done_step cfw && ! done_step booted; then
-  log "▶ first boot (vphoned answers in 1-2 min; unlock a bit later)"
-  if [ "$DRY" = 1 ]; then
-    # shellcheck disable=SC2086  # the env assignments are the point
-    dry env GFX=${GFX:-1} WINDOW=${WINDOW:-1} "$QEMU_RUN" "$VM"
-    mark booted
+# The restore's root helpers: the 32 KiB usbmuxd (stops the system one) and the USB/IP attach
+# loop, which runs until the host reboots; started once, in the background, its pid kept in
+# /run so a re-run does not start a second one.
+AUTOATTACH_PID=/run/vphone-usbip-autoattach.pid
+usb_helpers() {
+  dry sudo -v
+  dry sudo "$T/usbmuxd-32k.sh"
+  if [ "$DRY" = 0 ] && sudo test -s "$AUTOATTACH_PID" &&
+     sudo test -d "/proc/$(sudo cat "$AUTOATTACH_PID")"; then
+    log "  (the USB/IP attach loop is already running)"
   else
-    log "QEMU output → $VM/serial.log (stop it later via"
-    log "    tools/vphoned.sh POST /v1/rpc '{\"method\":\"system.shutdown\",\"params\":{\"force\":true},\"id\":1}'"
-    log "  — or Ctrl-A X in the window/serial; never stop it from the shell)."
-    GFX=${GFX:-1} WINDOW=${WINDOW:-1} "$QEMU_RUN" "$VM" > "$VM/serial.log" 2>&1 &
-    mark booted
-    until "$VSETUP_SRC/tools/vphoned.sh" GET "/v1/health" 2>/dev/null |
-        grep -q '"status"'; do sleep 10; printf '.' >&2; done
-    "$VSETUP_SRC/tools/vphoned.sh" POST /v1/rpc \
-      '{"method":"setup.skip","params":{"force":true},"id":1}'
-    "$VSETUP_SRC/tools/vphoned.sh" POST /v1/rpc \
-      '{"method":"screen.unlock","params":{},"id":1}'
-    echo
-    log "Unlocked — set Auto-Lock to Never and you are set."
+    dry sudo sh -c "nohup '$T/usbip-autoattach.sh' > /tmp/vphone-usbip-autoattach.log 2>&1 & echo \$! > $AUTOATTACH_PID"
   fi
+}
+
+do_restore() {
+  usb_helpers
+  dry "$T/dfu-up.sh" "$VM" "$VM/.runs-dfu"
+  dry "$VC" recovery-probe --ecid "$ECID" --timeout 180
+  dry env VPHONE_RESTORE_TIMEOUT_SCALE=10 "$VC" restore -l "$VSETUP_DEVICES" "$NAME" --ecid "$ECID" -v
+  dry "$T/dfu-stop.sh" "$VM"     # this VM's QEMU only, matched by its Disk.img
+}
+
+# In the SSH ramdisk: mount xART, and where an earlier install renamed the gigalocker to AA.gl,
+# give it back the name the ramdisk's seputil asks for (it reads it from its own refusal);
+# without it mount_filesystems panics the guest. A fresh restore has no gigalocker yet: nothing
+# to do, seputil makes it. The single quotes are the point: this runs in the guest.
+# shellcheck disable=SC2016
+GIGALOCKER_SH='x=; for n in 1 2 3 4 5 6 7; do t=$(/System/Library/Filesystems/apfs.fs/apfs.util -p /dev/disk1s$n 2>/dev/null); [ "$t" = xART ] && x=/dev/disk1s$n; done
+[ -n "$x" ] || x=/dev/disk1s3
+/sbin/mount_apfs "$x" /mnt7 2>/dev/null
+if [ -f /mnt7/AA.gl ]; then
+  out=$(/usr/libexec/seputil --gigalocker-init /mnt7 2>&1)
+  case $out in *"doesn'"'"'t exist"*) want=${out#*Gigalocker file (}; want=${want%%)*}; mv /mnt7/AA.gl "$want" && echo "gigalocker: AA.gl -> $want";; esac
 fi
+true'
+
+do_cfw() {
+  usb_helpers
+  dry bash "$T/ssh-ramdisk-rebuild-signed.sh" "$VSETUP_DEVICES" "$NAME"
+  dry "$T/restore-tree-mode.sh" "$VSETUP_DEVICES" "$NAME" ssh
+  dry python3 "$T/nvram-autoboot.py" "$VM/nvram.bin" --auto-boot false
+  dry "$T/dfu-up.sh" "$VM" "$VM/.runs-sshrd"
+  dry "$VC" recovery-probe --ecid "$ECID" --timeout 180
+  # --boot-ramdisk ends by waiting for restore mode, which the SSH ramdisk never enters: it runs
+  # in the background under a time limit, and the step goes on once SSH answers.
+  if [ "$DRY" = 1 ]; then
+    dry env VPHONE_RESTORE_TIMEOUT_SCALE=10 VPHONE_RESTORE_BOOT_ARGS_EXTRA=serial=3 \
+        "$VC" restore -l "$VSETUP_DEVICES" "$NAME" --ecid "$ECID" --boot-ramdisk -v
+  else
+    timeout 1800 env VPHONE_RESTORE_TIMEOUT_SCALE=10 VPHONE_RESTORE_BOOT_ARGS_EXTRA=serial=3 \
+      "$VC" restore -l "$VSETUP_DEVICES" "$NAME" --ecid "$ECID" --boot-ramdisk -v \
+      > "$VM/.runs-sshrd/boot-ramdisk.log" 2>&1 &
+    log "  waiting for the SSH ramdisk (log: $VM/.runs-sshrd/boot-ramdisk.log)"
+    local tries=0
+    until timeout 60 "$T/ssh-ramdisk.sh" id >/dev/null 2>&1; do
+      tries=$((tries + 1)); [ "$tries" -lt 60 ] || die "the SSH ramdisk did not answer in 30 min"
+      sleep 30
+    done
+  fi
+  dry "$T/ssh-ramdisk.sh" "$GIGALOCKER_SH"
+  dry timeout 1800 "$T/ssh-ramdisk.sh" '/usr/bin/mount_filesystems; /sbin/mount'
+  dry sudo "$VC" cfw install -l "$VSETUP_DEVICES" "$NAME" --work-parent /var/tmp --keep-artifacts
+  dry "$T/ssh-ramdisk.sh" 'sync; /sbin/umount /mnt2; /sbin/umount /mnt6; /sbin/umount /mnt1; sync'
+  dry "$T/dfu-stop.sh" "$VM"     # the flip below edits Disk.img: no VM may have it open
+  dry "$VC" cfw flip-snapshot "$VM/Disk.img"
+  dry python3 "$T/nvram-autoboot.py" "$VM/nvram.bin" --auto-boot true
+  dry "$T/restore-tree-mode.sh" "$VSETUP_DEVICES" "$NAME" full
+  # LLB's half of the scale; the guest device tree's half needs the running guest (first boot).
+  dry python3 "$T/display-scale.py" "$VM/nvram.bin" "$([ "$SCALE" = 3 ] && echo 0 || echo "$SCALE")"
+}
+
+step sanity   do_sanity
+step bundle   do_bundle
+step firmware do_firmware
+step prepare  do_prepare
+step restore  do_restore
+step cfw      do_cfw
+
+# ------------------------------------------------------------- first boot --
+# The only place a VM is started: once (twice when the scale needs the guest's device tree
+# changed, after vphoned has shut the guest down), in the background, for THIS VM alone.
+vrpc() { CID=$CID "$T/vphoned.sh" POST /v1/rpc "$1"; }
+boot_vm() {
+  GFX=${GFX:-1} WINDOW=${WINDOW:-1} CID=$CID "$QEMU_RUN" "$VM" > "$VM/serial.log" 2>&1 &
+  QEMU_PID=$!
+  log "  QEMU output → $VM/serial.log; waiting for vphoned"
+  until CID=$CID timeout 20 "$T/vphoned.sh" GET /v1/health 2>/dev/null | grep -q '"status":"ok"'; do
+    [ -d "/proc/$QEMU_PID" ] || die "QEMU exited; see $VM/serial.log"
+    sleep 10; printf '.' >&2
+  done
+  echo >&2
+}
+unlock_vm() {
+  local i
+  for i in $(seq 1 40); do
+    vrpc '{"method":"screen.unlock","params":{},"id":1}' 2>/dev/null | grep -q '"locked":false' && return 0
+    sleep 15
+  done
+  warn "the screen did not unlock; try: CID=$CID $T/vphoned.sh POST /v1/rpc '{\"method\":\"screen.unlock\",\"params\":{},\"id\":1}'"
+}
+
+do_first_boot() {
+  if [ "$DRY" = 1 ]; then
+    dry env GFX="${GFX:-1}" WINDOW="${WINDOW:-1}" CID="$CID" "$QEMU_RUN" "$VM"
+    dry "$T/vphoned.sh" POST /v1/rpc '{"method":"setup.status",...}'   # until data_migration_done
+    dry "$T/vphoned.sh" POST /v1/rpc '{"method":"setup.skip","params":{"force":true},"id":1}'
+    dry python3 "$T/auto-lock-never.py" "$VM" "$CID"
+    [ "$SCALE" = 3 ] || dry python3 "$T/guest-dt-scale.py" "$CID" "$SCALE"
+    return 0
+  fi
+  log "  the first boot migrates iOS's data behind an Apple logo and progress bar (20+ min)"
+  boot_vm
+  until vrpc '{"method":"setup.status","params":{},"id":1}' 2>/dev/null |
+      grep -q '"data_migration_done":true'; do
+    sleep 30; printf '.' >&2
+  done
+  echo >&2
+  vrpc '{"method":"setup.skip","params":{"force":true},"id":1}'; echo
+  unlock_vm
+  python3 "$T/auto-lock-never.py" "$VM" "$CID"
+  if [ "$SCALE" != 3 ]; then
+    # iOS 27 also takes the scale from the guest's device tree: set it, then restart the guest
+    # (vphoned shuts it down; QEMU exits by itself) so the new scale applies.
+    python3 "$T/guest-dt-scale.py" "$CID" "$SCALE"
+    log "  restarting the guest for the ${SCALE}x screen"
+    vrpc '{"method":"system.shutdown","params":{"force":true},"id":1}'; echo
+    wait "$QEMU_PID" || true
+    boot_vm
+    unlock_vm
+    if [ "$SCALE" = 1 ]; then python3 "$T/guest-1x-logo.py" "$CID"; fi
+  fi
+}
+step booted do_first_boot
 
 if [ "$DRY" = 1 ]; then
   log "Dry run complete — no command executed."
 else
-  log "VM '$NAME' ready at $VM. Re-launch any time:"
-  log "  GFX=1 WINDOW=1 $QEMU_RUN $VM"
+  log "VM '$NAME' is up and unlocked (Auto-Lock: Never). Later:"
+  log "  start:  GFX=1 WINDOW=1 CID=$CID $QEMU_RUN $VM"
+  log "  stop:   CID=$CID $T/vphoned.sh POST /v1/rpc '{\"method\":\"system.shutdown\",\"params\":{\"force\":true},\"id\":1}'"
 fi

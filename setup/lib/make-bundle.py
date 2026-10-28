@@ -61,10 +61,15 @@ if os.environ.get("ZERO_DISK", "") != "0":
 # render size is the UI points (native / native scale) times the flag.
 flag = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
 native_w, native_h, _ppi, native_scale = screen[0], screen[1], screen[2], screen[3]
-render_w = round(native_w / native_scale * flag / 2) * 2   # even; NVIDIA rows
-render_h = round(native_h / native_scale * flag / 2) * 2   # want padding
+# Exact points: iOS picks a device's own layout by its screen size in points, and a rounded
+# size gets the generic iPhone one (docs/ADVANCED.md, "Display scale").
+render_w = round(native_w / native_scale * flag)
+render_h = round(native_h / native_scale * flag)
 with open(os.path.join(vm, "gfx-res"), "w") as f:
     f.write(f"{render_w}x{render_h}\n")
+# The native size, which tools/set-scale.sh derives every scale from.
+with open(os.path.join(vm, "gfx-res.3x"), "w") as f:
+    f.write(f"{native_w}x{native_h}\n")
 
 print(f"bundle ready: {vm} (ECID 0x{ecid:x}, screen {native_w}x{native_h} "
       f"native @{native_scale}x, flag {flag}x -> render {render_w}x{render_h})")

@@ -5,6 +5,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 V=${VPHONE_CLI:-../vphone-cli}
+# ArchiveKit links Shims/libarchive/lib/libarchive.so: point it at this host's runtime library
+# (no -dev package needed). gcc searches its own ABI's dirs: /usr/lib64 on Fedora, /usr/lib on
+# Arch, /usr/lib/aarch64-linux-gnu on Ubuntu arm64.
+lib=$(gcc -print-file-name=libarchive.so.13)
+[ "${lib#/}" != "$lib" ] || { echo "libarchive.so.13 not found; install libarchive" >&2; exit 1; }
+mkdir -p Shims/libarchive/lib && ln -sfn "$(realpath -s "$lib")" Shims/libarchive/lib/libarchive.so
 declare -A SRC=(
   [VPhonePatchKit]=VPhoneExecutable/VPhoneCommand/VPhonePatchKit
   [FirmwarePatcher]=VPhoneExecutable/VPhoneCommand/FirmwarePatcher

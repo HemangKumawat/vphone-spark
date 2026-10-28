@@ -18,7 +18,7 @@ files listed in `excludes/`, plus:
 ```sh
 VPHONE_CLI=../vphone-cli ./sync-sources.sh
 swift build --build-system swiftbuild --scratch-path .build/out
-# -> .build/out/out/Products/Debug-linux-x86_64/vphone-cli
+# -> .build/out/out/Products/Debug-linux-$(uname -m)/vphone-cli
 ```
 
 Needs Swift 6.4.1. Re-run `sync-sources.sh` after changing anything in `overlay/`, `edits/` or

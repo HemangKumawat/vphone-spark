@@ -86,8 +86,8 @@ do_phase deps && {
   # swiftly (Swift for the vphone-cli Linux build)
   if ! have swift; then
     log " Installing swiftly + Swift 6.4.1"
-    curl -O https://download.swift.org/swiftly/linux/swiftly.tar.gz
-    tar -zxf swiftly.tar.gz && rm swiftly.tar.gz
+    curl -fO "https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz"
+    tar -zxf "swiftly-$(uname -m).tar.gz" && rm "swiftly-$(uname -m).tar.gz"
     ./swiftly install -y 6.4.1  # swiftly 6.4.1; ask: 'swiftly install 6.4.1' if script name changes
     rm -f ./swiftly
     # shellcheck disable=SC1091  # swiftly's env file, outside this checkout

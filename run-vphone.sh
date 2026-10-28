@@ -36,11 +36,13 @@ seprom_name=$(python3 -c "import plistlib,sys;print((plistlib.load(open(sys.argv
 machine="vresearch101,ecid=$ecid,sep-rom=$VM/$seprom_name"
 # the serial number Virtualization.framework reported for this machine, if known
 [ -f "$VM/serial" ] && machine+=",serial=$(tr -d ' \n' < "$VM/serial")"
-# TB_SIZE: the TCG code cache in MiB (default 2048, x86-64's limit). An iOS guest keeps ~1.3M
-# translated blocks live at ~18x expansion: the default 1 GiB filled every ~3.5 minutes (14 full
-# flushes in 49 minutes), and every flush retranslates everything the guest runs next.
+# TB_SIZE: the TCG code cache in MiB. An iOS guest keeps ~1.3M translated blocks live at ~18x
+# expansion: the default 1 GiB filled every ~3.5 minutes (14 full flushes in 49 minutes), and every
+# flush retranslates everything the guest runs next. Default 2048 on x86-64, its TCG backend's cap
+# (qemu tcg/i386/tcg-target.h); 4096 on aarch64, whose backend has none (tcg/aarch64/tcg-target.h).
+[ "$(uname -m)" = aarch64 ] && tb_default=4096 || tb_default=2048
 args=(
-  -accel "tcg,tb-size=${TB_SIZE:-2048}"
+  -accel "tcg,tb-size=${TB_SIZE:-$tb_default}"
   -smp "$SMP,maxcpus=$((SMP + 1))" -m "$MEM"
   -bios "$VM/$rom_name"
   # nvram.bin is Virtualization.framework aux storage: a 16 KiB header, then
@@ -83,9 +85,11 @@ if [ "${GFX:-0}" = 1 ]; then
   export REIMS_VGPU_WINDOW_TITLE=${REIMS_VGPU_WINDOW_TITLE:-vphone-linux}
   # Every GPU task process must pick the same Vulkan device as QEMU (a task
   # process left to the loader picked llvmpipe)
-  if [ -z "${VK_DRIVER_FILES:-}" ] && [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ]; then
-    export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json
-  fi
+  # (Fedora names NVIDIA's ICD per arch, Ubuntu and the .run installer do not).
+  for icd in /usr/share/vulkan/icd.d/nvidia_icd."$(uname -m)".json /usr/share/vulkan/icd.d/nvidia_icd.json \
+             /etc/vulkan/icd.d/nvidia_icd.json; do
+    [ -z "${VK_DRIVER_FILES:-}" ] && [ -f "$icd" ] && export VK_DRIVER_FILES=$icd
+  done
   # A degradation reims-vgpu would die at (its DIES list) is recorded and relayed instead, so
   # one app's use of an unmodelled Metal corner costs an inexact frame, not the VM. The census
   # (census-<pid>.json) lists every kind met. REIMS_VGPU_CENSUS_DIR= (empty) restores deaths.
@@ -97,6 +101,12 @@ fi
 # VPHONE_TARGET_PAGE_BITS=12 / VPHONE_TLB_RANGE_PAGES=0 restore QEMU's defaults.
 export VPHONE_TARGET_PAGE_BITS=${VPHONE_TARGET_PAGE_BITS:-14}
 export VPHONE_TLB_RANGE_PAGES=${VPHONE_TLB_RANGE_PAGES:-1}
+# VPHONE_SAFE_TCG=1 turns off the three TCG speed tricks below (cross-page links, return-address
+# prefetch, inline jump cache lookup), which were only ever measured on x86-64 hosts: the first
+# thing to try when a guest misbehaves on an aarch64 host.
+if [ "${VPHONE_SAFE_TCG:-0}" = 1 ]; then
+  export VPHONE_XPAGE_LINKS=0 VPHONE_RET_PREFETCH=0 VPHONE_INLINE_LOOKUP=0
+fi
 # Direct branches to another page chain through a TLB-checked link instead of a TB lookup
 # (qemu target/arm/tcg/translate-a64.c gen_goto_tb_checked). VPHONE_XPAGE_LINKS=0 disables.
 export VPHONE_XPAGE_LINKS=${VPHONE_XPAGE_LINKS:-1}
@@ -147,10 +157,20 @@ fi
 [ -n "${GDB:-}" ] && args+=(-gdb "tcp::$GDB" -S)
 
 # Hybrid hosts (this i7-14700K: P-cores 0-15, E-cores 16-27): keep QEMU on the performance
-# cores, where a vCPU thread runs TCG code far faster than on an efficiency core.
+# cores, where a vCPU thread runs TCG code far faster than on an efficiency core. arm64 big.LITTLE
+# hosts (DGX Spark: 10 Cortex-X925 + 10 Cortex-A725) mark theirs with the highest cpu_capacity.
 # VPHONE_CPUS= (empty) leaves placement to the scheduler; any taskset list overrides.
-if [ -z "${VPHONE_CPUS+x}" ] && [ -r /sys/devices/cpu_core/cpus ]; then
-  VPHONE_CPUS=$(cat /sys/devices/cpu_core/cpus)
+SYSFS=${SYSFS:-/sys}
+if [ -z "${VPHONE_CPUS+x}" ]; then
+  if [ -r "$SYSFS/devices/cpu_core/cpus" ]; then
+    VPHONE_CPUS=$(cat "$SYSFS/devices/cpu_core/cpus")
+  else
+    # same tiering as tools/pin-threads.sh: "<fast cpus> <slow cpus>", nothing on a uniform host
+    read -r VPHONE_CPUS _ < <(grep -H . "$SYSFS"/devices/system/cpu/cpu[0-9]*/cpu_capacity 2>/dev/null |
+      sed -E 's#.*/cpu([0-9]+)/cpu_capacity:#\1 #' | sort -n |
+      awk '{n[NR]=$1; c[NR]=$2+0; if (c[NR]>m) m=c[NR]; if (NR==1 || c[NR]<l) l=c[NR]}
+           END{if (l*10 >= m*9) exit; for (i=1;i<=NR;i++) if (c[i]*2 >= m+l) f=f (f?",":"") n[i]; else s=s (s?",":"") n[i]; print f, s}') || true
+  fi
 fi
 if [ -n "${VPHONE_CPUS:-}" ]; then
   exec taskset -c "$VPHONE_CPUS" "$QEMU" -M "$machine" "${args[@]}" "$@"

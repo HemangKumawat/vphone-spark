@@ -52,7 +52,7 @@ Most changes have a switch, so each can be turned off for an A/B comparison.
 | **Jump cache lookup at `BR`/`BLR`/`RET`** without the generic lookup helper: `1` inline in the generated code, `2` the same check in `helper_vphone_lookup_fast` with the TB's flags as constants (smaller code: 322 instead of 346 host bytes per TB) | `VPHONE_INLINE_LOOKUP` (default 2) | Guest code 42% → 50% of vCPU time; `tb_lookup_ptr` 10.2% → 3.4%; `helper_lookup_tb_ptr` 4.3% → 1.0% |
 | **Return-address prefetch**: at each call, the generated code loads the return address's jump cache entry, so the return's lookup does not stall on a cache miss (38% of that lookup's time had been this miss). `2` inline, `1` through a helper, `0` off | `VPHONE_RET_PREFETCH` (launcher default 2) | QEMU's share of vCPU time while paging the home screen 47.8% → 44.6% |
 | **Larger minimum TLB size**: `CPU_TLB_DYN_MIN_BITS` raised from 6 to 10 (compile time). The softmmu TLBs no longer shrink to 64 entries under iOS's constant flushes. 12 made boot 13% slower | | QEMU's share of vCPU time 44.6% → 43.0% |
-| **2 GiB code cache** (x86-64's maximum). iOS's boot alone generates about 5 GB of translated code. With 1 GiB the cache filled every ~3.5 minutes of use (14 full flushes in 49 minutes), and each flush retranslates everything the guest runs next | `TB_SIZE` (launcher, MiB, default 2048) | |
+| **2 GiB code cache** (x86-64's maximum; 4 GiB on an aarch64 host, whose TCG backend has no cap). iOS's boot alone generates about 5 GB of translated code. With 1 GiB the cache filled every ~3.5 minutes of use (14 full flushes in 49 minutes), and each flush retranslates everything the guest runs next | `TB_SIZE` (launcher, MiB, default 2048; 4096 on aarch64) | |
 
 Tried, and left off by default:
 
@@ -132,7 +132,7 @@ Environment variables read by `run-vphone.sh`:
 | `QEMU` | `./qemu/build/qemu-system-aarch64` | QEMU binary |
 | `SMP` | `8` | AP vCPUs. The launcher passes `maxcpus=SMP+1` for the SEP core |
 | `MEM` | `8G` | Guest RAM |
-| `TB_SIZE` | `2048` | TCG code cache in MiB (`-accel tcg,tb-size=`). 2048 is x86-64's maximum; QEMU's default 1 GiB flushed every few minutes |
+| `TB_SIZE` | `2048` on x86-64, `4096` on aarch64 | TCG code cache in MiB (`-accel tcg,tb-size=`). 2048 is x86-64's maximum (`tcg/i386/tcg-target.h`); the aarch64 backend has no cap. QEMU's default 1 GiB flushed every few minutes |
 | `GFX` | `0` | `1` attaches the paravirtual GPU (`apple-gfx-mmio` on reims-vgpu) |
 | `WINDOW` | `0` | `1` opens reims-vgpu's window (sets `REIMS_VGPU_WINDOW`) |
 | `GFX_RES` | the VM's `gfx-res` file, else `1290x2796` | Framebuffer size (`apple-gfx-mmio.resolution`). At 1x `430x932` (`448x932` with the width a multiple of 32: fewer GPU copies, generic layout) |
@@ -145,8 +145,9 @@ Environment variables read by `run-vphone.sh`:
 | `VPHONE_TLB_RANGE_PAGES` | `1` | Range flushes compare page count with TLB entry count. `0` = upstream |
 | `VPHONE_XPAGE_LINKS` | `1` | Checked cross-page direct-branch links |
 | `VPHONE_RET_PREFETCH` | `2` | Return-address jump cache prefetch at calls: `2` inline, `1` through a helper, `0` off |
+| `VPHONE_SAFE_TCG` | `0` | `1` turns off the TCG speed tricks measured only on x86-64 hosts: sets `VPHONE_XPAGE_LINKS`, `VPHONE_RET_PREFETCH` and `VPHONE_INLINE_LOOKUP` to `0`. The first thing to try when a guest misbehaves on an aarch64 host (untested on a DGX Spark) |
 | `VPHONE_XHCI_NONREMOVABLE` | `0x1fe` | Bit n marks xHCI root port n non-removable. Needed for touch |
-| `VPHONE_CPUS` | `/sys/devices/cpu_core/cpus` (P-cores), if present | `taskset` CPU list for QEMU. Empty = no pinning |
+| `VPHONE_CPUS` | `/sys/devices/cpu_core/cpus` (P-cores), if present; on an arm64 big.LITTLE host the CPUs with the highest `cpu_capacity` (DGX Spark: the 10 Cortex-X925) | `taskset` CPU list for QEMU. Empty = no pinning |
 | `CID` | `3` | vsock guest CID, unique per running VM. `0` = no vsock |
 | `VSOCK` | `vhost` | `vhost` (kernel vhost-vsock), `uds` (`virtio-vsock-uds-pci`, branch `vsock-uds`), `auto` |
 | `VSOCK_DIR` | `/tmp/vphone-vsock` | Directory of the `uds` sockets (`$CID.sock`) |

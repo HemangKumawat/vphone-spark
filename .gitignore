@@ -40,3 +40,7 @@ sshramdisk/
 
 # OctoAlly session state (this fork's orchestration, never committed)
 .octoally-pro/
+# Made by linux-create/sync-sources.sh for this host
+linux-create/Shims/libarchive/lib/libarchive.so
+# Local code index (GitNexus)
+.gitnexus/

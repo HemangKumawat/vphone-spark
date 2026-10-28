@@ -12,11 +12,11 @@ This makes the same call through vphoned (`script.eval`). Where it does not take
 predates that: the tool re-signs the bundle's copy (VM-DIR/.vphoned.signed) with the two
 entitlements merged in (vphone-cli sign --merge; the old copy is kept as .vphoned.signed.before-mc),
 installs it in the guest (tools/vphoned-update.sh) and tries again. Env: VC (vphone-cli)."""
-import base64, hashlib, json, os, plistlib, shutil, socket, subprocess, sys, tempfile, time
+import base64, hashlib, json, os, platform, plistlib, shutil, socket, subprocess, sys, tempfile, time
 
 NEVER = 2**31 - 1
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VC = os.environ.get("VC", f"{ROOT}/linux-create/.build/out/out/Products/Debug-linux-x86_64/vphone-cli")
+VC = os.environ.get("VC", f"{ROOT}/linux-create/.build/out/out/Products/Debug-linux-{platform.machine()}/vphone-cli")
 ENTITLEMENTS = {"com.apple.managedconfiguration.profiled-access": True,
                 "com.apple.managedconfiguration.profiled.set": True}
 SCRIPT = f"""

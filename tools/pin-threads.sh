@@ -6,7 +6,27 @@
 #  - everything else: the E-cores.
 # Busy vCPUs sharing a P-core's two hyper-threads each ran ~40% slower. Env: VCPU_CORES (the
 # P-core list, default 0 2 4 6 8 10 12 14), GPU_CPUS (default 1,3,5,7,9,11,13,15), OTHER_CPUS.
+# arm64 big.LITTLE hosts (DGX Spark: 10 Cortex-X925 + 10 Cortex-A725, one thread per core) rank
+# cores by cpu_capacity: there the vCPUs take the first 8 fastest cores, GPU threads the other
+# fastest ones (the slower cores when there are none), everything else the slower cores.
+# SYSFS (default /sys) points the detection at another tree.
 P=${1:?usage: pin-threads.sh PID [show]}
+SYSFS=${SYSFS:-/sys}
+# "<fast cpus> <slow cpus>" as taskset lists. Cores of one type can differ slightly (GB10's X925s
+# top out at 3.9-4.0 GHz), so the tiers split halfway between the fastest and slowest capacity, and
+# only when the slowest is over 10% below the fastest; nothing on a uniform host or without cpu_capacity.
+# ponytail: two tiers; a three-tier host gets its top tier plus the middle one as "fast".
+read -r fast slow < <(grep -H . "$SYSFS"/devices/system/cpu/cpu[0-9]*/cpu_capacity 2>/dev/null |
+  sed -E 's#.*/cpu([0-9]+)/cpu_capacity:#\1 #' | sort -n |
+  awk '{n[NR]=$1; c[NR]=$2+0; if (c[NR]>m) m=c[NR]; if (NR==1 || c[NR]<l) l=c[NR]}
+       END{if (l*10 >= m*9) exit; for (i=1;i<=NR;i++) if (c[i]*2 >= m+l) f=f (f?",":"") n[i]; else s=s (s?",":"") n[i]; print f, s}')
+if [ -n "$slow" ]; then
+  IFS=, read -r -a F <<< "$fast"
+  VCPU_CORES=${VCPU_CORES:-${F[*]:0:8}}
+  OTHER_CPUS=${OTHER_CPUS:-$slow}
+  GPU_CPUS=${GPU_CPUS:-$(IFS=,; echo "${F[*]:8}")}
+  GPU_CPUS=${GPU_CPUS:-$OTHER_CPUS}
+fi
 read -r -a VC <<< "${VCPU_CORES:-0 2 4 6 8 10 12 14}"
 GPU=${GPU_CPUS:-1,3,5,7,9,11,13,15}
 OTHER=${OTHER_CPUS:-16-27}

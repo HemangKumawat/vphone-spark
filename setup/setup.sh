@@ -127,10 +127,10 @@ do_phase sources && {
 
 # --------------------------------------------------------------- 3. build ---
 build_reims() {
-  if [ ! -f "$VSETUP_SRC/reims-vgpu/target/dist-vulkan/lib/libreims_vgpu.a" ]; then
-    log " Building reims-vgpu (~the long first build: its static lib is ~800 MB)"
-    make -C "$VSETUP_SRC/reims-vgpu"
-  fi
+  # Always: cargo rebuilds only what changed, and a submodule update must reach the library
+  # (QEMU is relinked below when the library is newer than it).
+  log " Building reims-vgpu (the first build is long: its static lib is ~800 MB)"
+  make -C "$VSETUP_SRC/reims-vgpu"
 }
 build_qemu() {
   local pkgcfg="$VSETUP_SRC/reims-vgpu/target/dist-vulkan/lib/pkgconfig"

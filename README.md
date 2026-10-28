@@ -8,7 +8,7 @@ Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **
   <img src="docs/screenshots/maps.png" width="200" alt="Maps">
   <img src="docs/screenshots/calendar.png" width="200" alt="Calendar">
 </p>
-<p align="center"><i>iOS 26.6.2 running on a Linux PC (Fedora, NVIDIA GPU) in vphone-linux.</i></p>
+<p align="center"><i>iOS 27.0.1 (iPhone 16 Pro, at 2x) running on a Linux PC (Fedora, NVIDIA GPU) in vphone-linux, created with <code>setup/create-vm.sh</code>.</i></p>
 
 vphone-cli runs iOS on an Apple Silicon Mac with Apple's Virtualization.framework, on the
 `vresearch101` virtual platform that Apple's Private Cloud Compute (PCC) research VMs use. vphone-linux
@@ -39,7 +39,8 @@ Tested guest pairings on Linux:
 | Device | iOS | cloudOS | State |
 |---|---|---|---|
 | iPhone17,3 (iPhone 16 Pro) | 26.6.2 (23G90) | 26.4 (23E5207q) | end-to-end: the home screen, created with no Mac |
-| iPhone19,4 (iPhone Duo) | 27.1 (24A94425) | 26.4 (23E5207q) | boots and unlocks (FEAT_CSSC + FEAT_PAUTH_LR in QEMU + vphone-cli 2.13.4's X1/CSSC patches); the display scanout is pending |
+| iPhone17,3 (iPhone 16 Pro) | 27.0.1 (24A446) | 26.4 (23E5207q) | end-to-end with `setup/create-vm.sh`: the home screen at 2x, Auto-Lock Never |
+| iPhone19,4 (iPhone Duo) | 27.1 (24A94425) | 26.4 (23E5207q) | the home screen: display, wallpaper, touch (keep it at 3x); needs this repo's QEMU (native X1 and CSSC) |
 
 **Works**
 
@@ -108,8 +109,8 @@ at the end (never killed by the scripts). Non-interactive:
 ./setup/create-vm.sh --list         # every device and its tested pairings
 ```
 
-The pairings tested here: iPhone17,3 + iOS 26.6.2 (end-to-end: the home screen) and iPhone19,4
-(the iPhone Duo) + iOS 27.1 (boots and unlocks; the display scanout is still pending). Other
+The pairings tested here: iPhone17,3 + iOS 26.6.2 and + iOS 27.0.1 (end to end with these scripts:
+the home screen), and iPhone19,4 (the iPhone Duo) + iOS 27.1 (the home screen; keep it at 3x). Other
 pairings are macOS-tested and offered as "under test" with a confirmation. Already have a VM made
 with vphone-cli on a Mac? [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) shows how to bring it over
 instead. The step-by-step manual path, with the packages and every command, is

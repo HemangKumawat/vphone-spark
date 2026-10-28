@@ -91,7 +91,7 @@ if [ "$PAIR_MACBUILDER" = 1 ]; then
 fi
 if [ "$PAIR_LINUX" = 0 ] && [ "$DRY" = 0 ]; then
   warn "This pairing is macOS-tested but NOT yet verified on Linux: it is under test."
-  warn "The only Linux-verified pairing is iPhone17,3 + iOS 26.6.2 (cloudOS 26.4-23E5207q)."
+  warn "The Linux-verified pairings are the TESTED-ON-LINUX ones in --list."
   warn "Expect a first run to need manual attention (extra patches, CPU/RAM, restore retries)."
   confirm "Continue anyway?" || { echo "aborted."; exit 1; }
 fi

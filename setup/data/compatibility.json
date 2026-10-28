@@ -71,7 +71,7 @@
       "linuxTested": true,
       "macTested": true,
       "recommended": true,
-      "note": "The ONLY pairing verified end-to-end on Linux (restore, CFW, boot, home screen). Other pairings are macOS-tested and under test."
+      "note": "Verified end to end on Linux (restore, CFW, boot, home screen); runs at 1x."
     },
     {
       "device": "iPhone17,3",
@@ -84,10 +84,9 @@
         "txm-boot-precheck_admission"
       ],
       "patchMinBundle": "2.6.0",
-      "linuxTested": false,
+      "linuxTested": true,
       "macTested": true,
-      "underTest": true,
-      "note": "Needs the txm-boot-precheck patch (in vphone-cli bundle 2.6.0+); earlier bundles panic at first boot (unexpected SIGKILL of init). Currently under test on Linux."
+      "note": "Verified end to end on Linux with setup/create-vm.sh (restore, SSH-ramdisk CFW, first boot, unlock, Auto-Lock Never) at 2x: iOS 27 does not go below 2x. Needs the txm-boot-precheck patch (vphone-cli bundle 2.6.0+) and root for fw patch (the seal patcher mounts the restore ramdisk)."
     },
     {
       "device": "iPhone17,3",
@@ -332,10 +331,9 @@
         "cssc_emulation"
       ],
       "patchMinBundle": "2.13.4",
-      "linuxTested": false,
+      "linuxTested": true,
       "macTested": false,
-      "underTest": true,
-      "note": "Boots and unlocks on Linux (vphoned t=438, unlocked t=478) with our QEMU's FEAT_CSSC + FEAT_PAUTH_LR (the X1 RET/PAC-AUT SPPC forms decode natively; the CPA tagged arithmetic still UNDEFs into the guest's own handler) and the X1/CSSC patches in vphone-cli 2.13.4+. The display scanout is still pending: the guest renders but nothing reaches the host window yet. Needs root for fw patch (the seal patcher mounts the restore ramdisk rw)."
+      "note": "Created and run on Linux to the home screen: display, wallpaper, touch, unlock (vphoned ~68 s, unlocked ~107-160 s with this repo's QEMU native X1 decode). Keep it at 3x: at 2x its own home screen mishandles touch. Needs root for fw patch."
     }
   ]
 }

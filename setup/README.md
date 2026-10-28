@@ -27,7 +27,8 @@ Non-interactive:
 | Device | iOS | cloudOS | Preset | State |
 |---|---|---|---|---|
 | `iPhone17,3` (iPhone 16 Pro) | **26.6.2** (23G90) | `26.4-23E5207q` | standard | end-to-end: home screen |
-| `iPhone19,4` (iPhone Duo) | **27.1** (24A94425) | `26.4-23E5207q` | standard | boots + unlocks; display scanout pending |
+| `iPhone17,3` (iPhone 16 Pro) | **27.0.1** (24A446) | `26.4-23E5207q` | standard | end-to-end with create-vm.sh: home screen at 2x |
+| `iPhone19,4` (iPhone Duo) | **27.1** (24A94425) | `26.4-23E5207q` | standard | home screen (keep at 3x) |
 
 iOS 27 pairings need this repo's QEMU (it implements FEAT_CSSC — without it the
 27.1 first boot crawls at a trap per instruction) and run `fw patch` under sudo
@@ -85,14 +86,15 @@ macOS instructions instead of pretending they work on Linux alone.
 | `--device ID` / `--ios V` | skip the menus |
 | `--cloudos IPSW` | override the pairing's cloudOS image |
 | `--name N` | VM name (default `vphone-<device>-<ios>`) |
-| `--scale 1|2|3` | display scale (default 1x — 9× fewer pixels than 3x) |
+| `--scale 1|2|3` | display scale (default 1x — 9× fewer pixels than 3x; iOS 27 does not go below 2x) |
 | `--dry-run` | print every command the pipeline would run, execute nothing |
 | `--list` | print devices and their pairings |
+| `--cid N` | the VM's vsock CID (default 3; pick another next to a running VM) |
 | `GPU_DRIVER_BUNDLE=` | path to `AppleParavirtGPUMetalIOGPUFamily.bundle` |
 | `IPSW_URL=`, `CLOUDOS_IPSW_URL=` | restore-image URLs instead of local files |
 
 Pairings labeled **TESTED-ON-LINUX** in `--list` are fully supported here
-(today that is one: iPhone17,3 + iOS 26.6.2); everything else is
+(today: iPhone17,3 + iOS 26.6.2 and 27.0.1, iPhone19,4 + iOS 27.1); everything else is
 **mac-tested -- under test**: selectable with a confirmation prompt.
 
 ## CI

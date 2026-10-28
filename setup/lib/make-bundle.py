@@ -42,7 +42,14 @@ plistlib.dump({
         "pixelsPerInch": screen[2], "scale": screen[3],
     },
     "romImages": {"avpBooter": "OpenAVB.bin", "avpSEPBooter": "OpenSEP.bin"},
-    "machineIdentifier": plistlib.dumps({"ECID": ecid}),
+    # vphone-cli 2.13's manifest requires the storage names and the network config (its MAC
+    # stays empty until the first boot), and reads the guest's product type from it.
+    "diskImage": "Disk.img",
+    "nvramStorage": "nvram.bin",
+    "sepStorage": "SEPStorage",
+    "networkConfig": {"mode": "nat", "macAddress": ""},
+    "guestProductType": device,
+    "machineIdentifier": plistlib.dumps({"ECID": ecid}, fmt=plistlib.FMT_BINARY),
 }, open(os.path.join(vm, "config.plist"), "wb"))
 open(os.path.join(vm, "ecid"), "w").write("0x%x\n" % ecid)
 

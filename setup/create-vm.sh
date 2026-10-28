@@ -212,9 +212,21 @@ do_prepare() {
      • sudo $T/gpu-driver-from-cloudos.sh (restores a stock cloudOS once and extracts it),
      • or copy one to $VSETUP_RELEASE/AppleParavirtGPUMetalIOGPUFamily.bundle,
      • or set GPU_DRIVER_BUNDLE=/path/to/AppleParavirtGPUMetalIOGPUFamily.bundle"
+  # An existing restore tree is a prepare that did not finish (or a patch that failed part way,
+  # which leaves files patched in place with no originals kept): fw prepare refuses to overwrite
+  # it, so it goes, and the firmware is prepared again from the IPSWs.
+  local tree
+  for tree in "$VM"/*_Restore "$VM/FirmwareOriginals"; do
+    [ -e "$tree" ] || continue
+    log "  removing the unfinished $(basename "$tree") of an earlier run"
+    dry rm -rf "$tree"
+  done
   dry "$VC" fw prepare -l "$VSETUP_DEVICES" "$NAME" \
       -i "${IPSW_URL:-$IOS_LOCAL}" -c "${CLOUDOS_LOCAL:-$PAIR_CLOUDOS}" \
       --gpu-driver-bundle "$gpu_bundle"
+}
+
+do_patch() {
   # iOS 27 pairings need the seal patcher, which mounts the restore ramdisk read-write through
   # linux-apfs-rw (root), and the TXM boot pre-check. A 26.x pairing patches as the user.
   case $IOS in
@@ -305,6 +317,14 @@ step sanity   do_sanity
 step bundle   do_bundle
 step firmware do_firmware
 step prepare  do_prepare
+# A failed patch leaves the tree part patched: prepare runs again before the next patch.
+if ! done_step patch && done_step prepare && [ -e "$VM/.patch-started" ]; then
+  log "  an earlier fw patch did not finish: preparing the firmware again first"
+  [ "$DRY" = 1 ] || { grep -vx prepare "$STATE" > "$STATE.new" || true; mv "$STATE.new" "$STATE"; }
+  step prepare do_prepare
+fi
+[ "$DRY" = 1 ] || : > "$VM/.patch-started"
+step patch    do_patch
 step restore  do_restore
 step cfw      do_cfw
 

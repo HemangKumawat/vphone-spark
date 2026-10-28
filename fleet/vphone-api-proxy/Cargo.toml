@@ -1,0 +1,13 @@
+[package]
+name = "vphone-api-proxy"
+version = "0.1.0"
+description = "Token-checked HTTP/WebSocket gateway to one phone's vphoned (Linux --api-listen)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+libc.workspace = true
+
+[lints]
+workspace = true

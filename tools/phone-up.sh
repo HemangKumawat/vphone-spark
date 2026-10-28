@@ -7,6 +7,12 @@
 # config/profiles.toml (default: phone.toml's `profile`, else lite). The phone's QMP socket and
 # census go in runs/ID/; its vsock CID comes from phone.toml, its MAC and serial from its own files.
 #
+# API_LISTEN=HOST:PORT also starts the phone's token-checked HTTP/WebSocket API there
+# (fleet/vphone-api-proxy: `cargo spark` in fleet/ on aarch64, `cargo build --release` elsewhere;
+# VPHONE_API_PROXY names another binary).
+# It prints its token unless VPHONE_API_TOKEN sets one, logs each connection with API_VERBOSE=1,
+# and exits with QEMU.
+#
 # Exit 2: the phone's Disk.img, nvram.bin or SEPStorage is already open. The drives are opened with
 # file.locking=off, so QEMU itself would let a second guest write the same disk. Exit 1: a golden,
 # a folder without phone.toml or with read-only state files, or a serial, MAC or CID that another
@@ -100,5 +106,18 @@ export REIMS_VGPU_CENSUS_DIR=${REIMS_VGPU_CENSUS_DIR-$R/census}
 mkdir -p "$R"
 echo "phone $id: profile $profile, cid $CID, mac $mac, serial $serial, census ${REIMS_VGPU_CENSUS_DIR:-off}," \
   "qmp $R/qmp.sock, state $VM/{Disk.img,nvram.bin,SEPStorage}" >&2
+if [ -n "${API_LISTEN:-}" ]; then
+  case $(uname -m) in
+    aarch64) proxy=fleet/target/aarch64-unknown-linux-musl/release/vphone-api-proxy ;;
+    *) proxy=fleet/target/release/vphone-api-proxy ;;
+  esac
+  proxy=${VPHONE_API_PROXY:-$proxy}
+  "$proxy" --help >/dev/null 2>&1 ||
+    fail 1 "API_LISTEN needs $proxy to run here: 'cargo spark' (aarch64) or 'cargo build --release' in fleet/, or set VPHONE_API_PROXY"
+  # This shell's pid becomes QEMU's at the exec below, so --exit-with-parent ends it with the
+  # phone. The lock fds stay out of it: a proxy outliving QEMU must not keep the files locked.
+  "$proxy" --listen "$API_LISTEN" --cid "$CID" --vsock-dir "${VSOCK_DIR:-/tmp/vphone-vsock}" \
+    --exit-with-parent $$ ${API_VERBOSE:+--verbose} 7<&- 8<&- 9<&- &
+fi
 # -name marks it a phone: tools/boot-test.sh leaves phones running.
 exec ./run-vphone.sh "$VM" -name "phone-$id" -qmp "unix:$R/qmp.sock,server,nowait" "$@"

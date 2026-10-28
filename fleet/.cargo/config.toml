@@ -1,0 +1,8 @@
+# Static aarch64 binaries for the DGX Spark, linked by the rust-lld that ships with rustup:
+#   rustup target add aarch64-unknown-linux-musl && cargo spark
+# -> target/aarch64-unknown-linux-musl/release/vphone-api-proxy (no libc needed on the Spark).
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+
+[alias]
+spark = "build --release --target aarch64-unknown-linux-musl"

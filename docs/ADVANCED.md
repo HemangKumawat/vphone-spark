@@ -102,8 +102,13 @@ guest's Preboot `devicetree.img4` through vphoned, keeping the original in the g
 (`devicetree.img4.before-scale`) and on the host (`runs/guest-dt-scale/`). `set-scale.sh` runs it.
 
 **iOS 27 does not go below 2x.** With LLB and the device tree both at 1, an iPhone Duo on iOS 27.1
-still reported `UIScreen.scale` 2 and drew a 2x interface on the 1x screen. Use 2x there: the Duo
-(1398x2034 at 3x) runs at 932x1356, its own 466x678 points. 1x works on iOS 26.
+still reported `UIScreen.scale` 2 and drew a 2x interface on the 1x screen. 1x works on iOS 26.
+
+**The iPhone Duo: keep it at 3x for now.** At 2x with its own 466x678 points (932x1356) it shows its
+own layout, but its home screen takes every tap as the Control Center pull-down and ignores swipes
+(Control Center itself takes touches fine); at 3x everything works. At 2x with the width rounded up
+(`ALIGN32=1`, 960x1356) touch works, with the generic iPhone layout. Open bug: some Duo-only region
+of the home screen is sized for 3x.
 
 ```sh
 python3 tools/display-scale.py vms/myphone/nvram.bin        # show the current state

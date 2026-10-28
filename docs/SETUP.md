@@ -250,7 +250,8 @@ These made the biggest difference on the test PC:
 
    `tools/set-scale.sh vms/myphone 3` goes back to 3x.
    On iOS 27 use `2` instead of `1`: iOS 27 does not go below 2x (2x is still 2.25 times fewer
-   pixels than 3x, and needs no boot logo).
+   pixels than 3x, and needs no boot logo). Keep an iPhone Duo at 3x for now
+   ([ADVANCED.md](ADVANCED.md#display-scale)).
 3. **Turn off background services** the VM doesn't need for app testing (iCloud, Siri, analytics...).
    More are listed in [ADVANCED.md](ADVANCED.md#background-services).
 

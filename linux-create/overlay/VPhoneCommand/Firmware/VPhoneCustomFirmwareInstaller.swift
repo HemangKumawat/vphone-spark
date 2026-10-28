@@ -3003,13 +3003,30 @@ struct VPhoneCustomFirmwareInstaller {
         ), mode: 0o644, owner: Self.guestOwner)
     }
 
+    /// The entitlements merged into vphoned at install (`installVphoned`).
+    static let vphonedSettingsEntitlements = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+        <key>com.apple.managedconfiguration.profiled-access</key><true/>
+        <key>com.apple.managedconfiguration.profiled.set</key><true/>
+        </dict></plist>
+        """.utf8)
+
     private func installVphoned(guestDevice: VPhoneGuestDevice, system: VPhoneConfinedDirectory, work: WorkDirectory) throws {
-        // Install the same signed bytes that vm launch uses for auto-update.
-        // Re-signing here changes the binary hash and forces an upload and
-        // daemon restart on the VM's first boot.
+        // Install the same signed bytes that vm launch uses for auto-update:
+        // the re-signed copy below is also what installSignedDaemonCopy keeps
+        // as .vphoned.signed, so the two hashes agree.
         let vphoned = try VPhoneGuestBinaries.resolve(VPhoneResources.vphonedName(for: guestDevice.family))
         let staged = work.file("vphoned")
         try fm.copyItem(at: vphoned, to: staged)
+        // vphone-linux: ManagedConfiguration's write entitlements, which the release's vphoned
+        // lacks. Without them profiled ignores vphoned's settings writes, so Auto-Lock "Never"
+        // (display.auto_lock.set, tools/auto-lock-never.sh) never takes; Settings holds the same.
+        try VPhoneSigner.sign(
+            fileAt: staged,
+            options: .init(identifier: "vphoned", entitlements: Self.vphonedSettingsEntitlements, mergesExisting: true),
+        )
         if guestDevice.family == .iPhone || guestDevice.family == .iPad {
             // Install on both full and environment-only updates, before the
             // daemon that needs it. The payload is already signed in the bundle.

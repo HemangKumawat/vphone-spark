@@ -231,7 +231,8 @@ where taps reach it:
 These made the biggest difference on the test PC:
 
 1. **In the iPhone's Settings:** Accessibility > Motion > **Reduce Motion** on; Accessibility >
-   Display & Text Size > **Reduce Transparency** on; Display & Brightness > **Auto-Lock: Never**.
+   Display & Text Size > **Reduce Transparency** on; Display & Brightness > **Auto-Lock: Never**
+   (or, with the VM running, `python3 tools/auto-lock-never.py vms/myphone 3`).
 2. **Render at 1x** instead of 3x, about 9 times fewer pixels with the same layout. With the VM
    running:
 

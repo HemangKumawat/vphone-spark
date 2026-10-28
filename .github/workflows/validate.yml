@@ -2,7 +2,7 @@ name: validate
 
 on:
   push:
-    paths: ['**.sh', 'setup/**', '.github/workflows/validate.yml']
+    paths: ['**.sh', 'setup/**', 'fleet/**', 'config/**', '.github/workflows/validate.yml']
   pull_request:
   schedule:
     - cron: '0 3 * * 1'   # weekly: catch pairing/validation drift early
@@ -96,6 +96,40 @@ jobs:
               setup/setup.sh setup/create-vm.sh setup/lib/common.sh 2>/dev/null; then
             echo 'FAIL: kill commands are not allowed in setup scripts'; exit 1
           fi
+
+  fleet-arm64:
+    name: fleet on arm64 (build, lint, test)
+    # GitHub's free arm64 runners serve public repositories: a private copy never queues this job.
+    # A missing repository object (some event payloads) compares unequal, so it skips too.
+    if: ${{ github.event.repository.visibility == 'public' }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      # The whole repository, not fleet/ alone: the tests read config/profiles.toml.
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: aarch64-unknown-linux-musl
+      - name: The host check on aarch64 (informational; a runner has no GPU or vsock)
+        continue-on-error: true
+        run: tools/check-host.sh --runtime
+      - name: fmt, clippy -D warnings, test (and nothing left in /tmp)
+        working-directory: fleet
+        run: |
+          before=$(find /tmp -maxdepth 1 -name 'vphone-*' | wc -l)
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+          after=$(find /tmp -maxdepth 1 -name 'vphone-*' | wc -l)
+          echo "/tmp/vphone-*: $before before the tests, $after after"
+          test "$after" -le "$before"
+      - name: Static aarch64 binaries (cargo spark)
+        working-directory: fleet
+        run: |
+          cargo spark
+          file target/aarch64-unknown-linux-musl/release/vphone-fleet \
+            target/aarch64-unknown-linux-musl/release/vphone-api-proxy | tee out.txt
+          test "$(grep -c 'ARM aarch64.*statically linked' out.txt)" = 2
 
   no-apple-content:
     name: no Apple code or firmware in the repo

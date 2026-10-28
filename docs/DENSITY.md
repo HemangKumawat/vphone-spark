@@ -230,7 +230,7 @@ are idle most of the time, so `vphone-fleet serve` pauses the idle ones and wake
 
 | Approach | Why it does not fit |
 |---|---|
-| Firecracker, cloud-hypervisor, libkrun, Kata | They need KVM. KVM runs the guest on the host CPU, and iOS needs Apple CPU features (GXF, SPRR, Apple system registers) a non-Apple CPU does not have. Only QEMU's TCG emulates them. |
+| Firecracker, cloud-hypervisor, libkrun, Kata | They need KVM. KVM runs the guest on the host CPU, and iOS needs Apple CPU features (GXF, SPRR, Apple system registers) a non-Apple CPU does not have. Only QEMU's TCG emulates them today; trap-and-emulate under KVM is an [open question](AGENT-BRINGUP.md#open-question-hardware-virtualization). |
 | gVisor | A user-space Linux kernel for Linux processes. iOS is not a Linux process. |
 | LXC and other containers | They share the host's Linux kernel. iOS brings its own kernel (XNU). |
 | Memory balloon, virtio-mem, free page reporting | They need a driver in the guest. iOS has none. |
@@ -400,7 +400,9 @@ These are estimates from x86-64 measurements in these docs, not measured on a Sp
 - **KSM saves nothing for `GFX=1` phones.** Kernel same-page merging only merges private anonymous
   memory that has been marked mergeable. A shared `/dev/shm` mapping is neither. Only headless
   (`GFX=0`) phones, whose RAM is ordinary anonymous memory, could benefit. A 25-40% saving is
-  plausible but inferred, and `run-vphone.sh` does not mark that memory mergeable yet.
+  plausible but inferred. QEMU already marks that RAM mergeable (`-machine mem-merge`, on by
+  default: `qemu/qemu-options.hx`, `memory_try_enable_merging` in `qemu/system/physmem.c`), so the
+  host only has to turn KSM on (`echo 1 | sudo tee /sys/kernel/mm/ksm/run`).
 - **`TB_SIZE` is resident memory per phone.** The TCG code cache fills under use, so count it with
   `MEM` for each phone.
 - **`vm.max_map_count`** must be at least 1048576 ([SETUP.md](SETUP.md)). The limit applies to each

@@ -1,12 +1,9 @@
 # vphone-spark
 
-A copy of [YahiaAngelo/vphone-linux](https://github.com/YahiaAngelo/vphone-linux) (based on commit
-`3678abe`, git remote `upstream`), being ported to an **NVIDIA DGX Spark** (GB10, Linux aarch64).
+A port of [YahiaAngelo/vphone-linux](https://github.com/YahiaAngelo/vphone-linux) (based on commit
+`3678abe`, git remote `upstream`) to the **NVIDIA DGX Spark** (GB10, Linux aarch64), for running many
+virtual iPhones on one host, each with its own persistent data.
 
-> **Spark status: untested on Spark.** Nothing in this repository has been built or run on a DGX
-> Spark yet. Upstream vphone-linux supports only a Linux x86_64 host; everything below this box is
-> upstream's text and describes x86_64. The Spark port is work in progress.
->
 > **App Store limit: no App Store, no Apple ID.** These are research VMs (Apple's `vresearch101`
 > platform). Signing in to the App Store or an Apple ID fails (vphone-cli issues
 > [#393](https://github.com/Lakr233/vphone-cli/issues/393),
@@ -16,12 +13,41 @@ A copy of [YahiaAngelo/vphone-linux](https://github.com/YahiaAngelo/vphone-linux
 > Instagram and other App Store apps cannot be installed. Only apps you build yourself (for example
 > with [xtool](https://github.com/xtool-org/xtool)) and sideload with `tools/install-ipa.py` run.
 >
+> **Spark status: untested on Spark.** Nothing in this repository has been built or booted on a DGX
+> Spark yet. Written and tested on an x86-64 Linux host: the aarch64 host glue, one read-only golden
+> with per-phone reflink copies and identities ([docs/DENSITY.md](docs/DENSITY.md)), and the Rust
+> fleet manager and API proxy in `fleet/` (`cargo test` against a fake QEMU and fake guests). To
+> bring it up on a Spark: [docs/DGX-SPARK.md](docs/DGX-SPARK.md) (host setup),
+> [docs/SPARK-BOOT-CHECKLIST.md](docs/SPARK-BOOT-CHECKLIST.md) (the steps, in order) and
+> [docs/AGENT-BRINGUP.md](docs/AGENT-BRINGUP.md) (diagnosis, contributing, reporting).
+> `tools/density-bench.sh` measures what each phone costs.
+>
 > **How many phones per Spark (estimate, untested on Spark).** Inferred from upstream's x86_64
-> measurements, not measured on a Spark: the guest runs under TCG emulation, so the 20 CPU cores are
-> the limit. Expect about 8 phones idling with one light app each, or about 4-6 in active use. The
-> 128 GB of memory alone would allow about 20 (about 6 GB per phone).
+> measurements: the guest runs under TCG emulation, so the 20 CPU cores are the limit. Expect about 8
+> phones idling with one light app each, or about 4-6 in active use. The 128 GB of memory alone
+> would allow about 20 (about 6 GB per phone); parking idle phones may get closer to that.
+
+## Credits
+
+- [Lakr233/vphone-cli](https://github.com/Lakr233/vphone-cli) (MIT): the original virtual iPhone on
+  Apple silicon Macs, its firmware tooling, CFW and the vphoned guest daemon.
+- [YahiaAngelo/vphone-linux](https://github.com/YahiaAngelo/vphone-linux) (MIT): the Linux port this
+  repository is based on, at commit `3678abe`, with its history kept.
+- [YahiaAngelo/qemu-vphone](https://github.com/YahiaAngelo/qemu-vphone), built on
+  [ChefKissInc/Inferno](https://github.com/ChefKissInc/Inferno) (formerly QEMUAppleSilicon): the
+  emulator.
+- steelbrain's [reims-vgpu](https://github.com/steelbrain/reims-vgpu) and
+  [metal2vulkan](https://github.com/steelbrain/metal2vulkan) (GPL-2.0-or-later or LGPL-3.0-or-later):
+  the GPU path.
+- Apple's [Private Cloud Compute research environment](https://github.com/apple/security-pcc): the
+  `vresearch101` VM platform.
+
+Upstream's full credits are [below](#credits-upstream); licences in
+[docs/LICENSING.md](docs/LICENSING.md).
 
 ## Upstream: vphone-linux
+
+*From here on this is upstream's README, describing an x86_64 host; this port added its docs to the tables and corrected the submodule branch names.*
 
 Run [vphone-cli](https://github.com/Lakr233/vphone-cli)'s virtual iPhone on a **Linux x86_64 host**.
 
@@ -150,6 +176,10 @@ instead. The step-by-step manual path, with the packages and every command, is
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
 | [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |
+| [docs/DGX-SPARK.md](docs/DGX-SPARK.md) | Setting up a DGX Spark: driver and Vulkan, kernel modules, APFS and Secure Boot, page size, phones per Spark |
+| [docs/SPARK-BOOT-CHECKLIST.md](docs/SPARK-BOOT-CHECKLIST.md) | The bring-up steps in order, from host check to density measurements |
+| [docs/AGENT-BRINGUP.md](docs/AGENT-BRINGUP.md) | For an AI agent or person doing the bring-up: what is proven, diagnosis, contributing, findings |
+| [docs/AUTOMATION.md](docs/AUTOMATION.md) | Driving every phone through `vphone-fleet serve`: curl, Python, MCP |
 | [docs/DENSITY.md](docs/DENSITY.md) | Many phones on one host: one read-only golden, per-phone reflinks and identity, profiles, phones per DGX Spark |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | The TCG performance work, every tuning switch, and how to profile |
 | [docs/TOOLS.md](docs/TOOLS.md) | Each script in `tools/` |
@@ -181,7 +211,7 @@ side as above. vphone-cli is not a submodule: on a Mac it
 runs from its own releases, and `linux-create/sync-sources.sh` builds its firmware tooling from a
 vphone-cli 2.12.1 checkout without changing its files.
 
-## Credits
+## Credits (upstream)
 
 - [QEMU](https://www.qemu.org/) and [ChefKissInc/QEMUAppleSilicon](https://github.com/ChefKissInc/QEMUAppleSilicon)
   (Apple Silicon machines, GXF/SPRR, the A13-era CPU work this builds on).

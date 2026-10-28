@@ -32,6 +32,7 @@ Common arguments:
 | `phone-isolation-check.sh` | `tools/phone-isolation-check.sh GOLDEN A B` | Checks on disk, without booting, that two phones are isolated reflinks of one golden. See [DENSITY.md](DENSITY.md#tools). |
 | `vphone-fleet` | `vphone-fleet COMMAND` | Makes, runs, parks and snapshots the phones of one host, with a control API. See [DENSITY.md](DENSITY.md#vphone-fleet). |
 | `phones-volume.sh` | `sudo tools/phones-volume.sh IMAGE SIZE [MOUNTPOINT]` | Mounts a reflink XFS volume kept in one file, for ext4 hosts. See [DENSITY.md](DENSITY.md#tools). |
+| `density-bench.sh` | `tools/density-bench.sh OUT.csv ID...` | Boots the given phones at every combination of `MEMS`, `SMPS`, `TB_SIZES` and `GFXS` and writes one CSV row per phone and setting: unlock time, CPU-seconds per 20 s idle, PSS, KSM sharing. Untested on Spark. See [SPARK-BOOT-CHECKLIST.md](SPARK-BOOT-CHECKLIST.md#10-density). |
 | `stuck.sh` | `tools/stuck.sh VM_DIR SECONDS [qemu args]` | Boots with a gdb stub, waits, then prints every CPU's pc/sp/lr/cpsr, CPU 0's ELR/ESR/FAR and TTBRs, and the code around them. For boots that hang. |
 | `firstfault.py` | `tools/firstfault.py VM_DIR [--after TEXT] [--n N] [--secs S] [--ctx L]` | Boots with `-d int,unimp` streamed through a FIFO and prints the exception log around the first N aborts or undefined instructions after a trigger line (default `Guarded Execution Enter`). Avoids multi-GB logs. |
 

@@ -18,6 +18,16 @@ mkdir -p "$OUT"
 git -C "$SRC" checkout -q -f "$COMMIT"
 sed -i 's/#define USB_MTU (3 \* 16384)/#define USB_MTU (2 * 16384)/' "$SRC/src/usb.h"
 grep -q '#define USB_MTU (2 \* 16384)' "$SRC/src/usb.h"
+# Ubuntu 24.04 has no libimobiledevice-glue package: build the release into $OUT/glue.
+if ! pkg-config --exists libimobiledevice-glue-1.0; then
+  GLUE=libimobiledevice-glue-1.3.1
+  if ! [ -f "$OUT/glue/lib/pkgconfig/libimobiledevice-glue-1.0.pc" ]; then
+    curl -fsSL "https://github.com/libimobiledevice/libimobiledevice-glue/releases/download/1.3.1/$GLUE.tar.bz2" |
+      tar -xj -C "$OUT"
+    (cd "$OUT/$GLUE" && ./configure -q --prefix="$OUT/glue" --disable-shared --enable-static && make -s install)
+  fi
+  export PKG_CONFIG_PATH="$OUT/glue/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+fi
 cd "$SRC"
 # HAVE_LIBUSB_HOTPLUG_API follows the device across DFU/recovery/RestoreOS re-enumerations;
 # HAVE_LIBIMOBILEDEVICE stays undefined (no lockdownd preflight).

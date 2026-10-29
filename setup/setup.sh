@@ -48,12 +48,16 @@ pkg_feeds() {
       sudo apt-get install -y git gcc g++ clang lld binutils make cmake ninja-build meson \
         python3 python3-pil python3-setuptools pkg-config \
         libglib2.0-dev libpixman-1-dev liblzfse-dev libslirp-dev libssh-dev \
-        libzstd-dev libnettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
-        libbzip2-dev libx11-dev libxkbcommon-dev wayland libwayland-dev \
+        libzstd-dev nettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
+        libbz2-dev libx11-dev libxkbcommon-dev libwayland-dev wayland-protocols \
         libvulkan-dev mesa-vulkan-drivers vulkan-tools \
-        socat gdb linux-tools-generic \
-        usbip sshfs fuse3 p7zip-full linux-headers-generic \
-        libusb-1.0-0-dev libplist-dev libimobiledevice-glue-dev libssl-dev libcurl4-openssl-dev ;;
+        socat gdb linux-tools-common "linux-tools-$(uname -r)" \
+        sshfs fuse3 p7zip-full "linux-headers-$(uname -r)" \
+        autoconf automake libtool \
+        libusb-1.0-0-dev libplist-dev libssl-dev libcurl4-openssl-dev ;;
+        # Ubuntu ships usbip in linux-tools-<kernel> and has no libimobiledevice-glue-dev
+        # (tools/build-usbmuxd-32k.sh builds it). The -generic metapackages miss the
+        # DGX Spark's -nvidia kernel, so headers and tools follow the running kernel.
     arch|cachyos|manjaro)
       sudo pacman -S --needed --noconfirm git gcc clang lld binutils make cmake ninja meson \
         python python-pillow glib2 pixman lzfse libslirp libssh zstd nettle gnutls gtk3 \

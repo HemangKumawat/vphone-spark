@@ -46,7 +46,7 @@ pkg_feeds() {
     ubuntu|debian|linuxmint)
       sudo apt-get update
       sudo apt-get install -y git gcc g++ clang lld binutils make cmake ninja-build meson \
-        python3 python3-pil python3-setuptools pkg-config \
+        python3 python3-pil python3-setuptools python3-venv pkg-config \
         libglib2.0-dev libpixman-1-dev liblzfse-dev libslirp-dev libssh-dev \
         libzstd-dev nettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
         libbz2-dev libx11-dev libxkbcommon-dev libwayland-dev wayland-protocols \
@@ -152,7 +152,8 @@ build_qemu() {
     # ships 1.3.2. Use a private venv's meson then (the system one is left alone).
     local venv="$VSETUP_SRC/.build/meson-venv"
     if ! printf '1.5.0\n%s\n' "$(meson --version 2>/dev/null || echo 0)" | sort -V -C; then
-      [ -x "$venv/bin/meson" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q 'meson>=1.5'; }
+      [ -x "$venv/bin/meson" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q 'meson>=1.5'; } ||
+        die "could not set up meson >= 1.5 in $venv (Debian/Ubuntu: install python3-venv)"
       export PATH="$venv/bin:$PATH"
     fi
     # The SEP model (hw/arm/apple-silicon/sep.c) calls nettle directly and QEMU wants >= 3.10;

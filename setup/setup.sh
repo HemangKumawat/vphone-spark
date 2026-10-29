@@ -155,11 +155,28 @@ build_qemu() {
       [ -x "$venv/bin/meson" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q 'meson>=1.5'; }
       export PATH="$venv/bin:$PATH"
     fi
+    # The SEP model (hw/arm/apple-silicon/sep.c) calls nettle directly and QEMU wants >= 3.10;
+    # Ubuntu 24.04 ships 3.9.1. Build 3.10.2 into .build/nettle then, found first by pkg-config
+    # and by the loader (rpath), so QEMU and the system gnutls share that one copy.
+    local ldflags=""
+    if ! pkg-config --atleast-version=3.10 nettle; then
+      local nettle="$VSETUP_SRC/.build/nettle"
+      if ! [ -f "$nettle/lib/pkgconfig/nettle.pc" ]; then
+        log " Building nettle 3.10.2 (the distro's is older than QEMU needs)"
+        curl -fsSL https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz | tar -xz -C "$VSETUP_SRC/.build"
+        ( cd "$VSETUP_SRC/.build/nettle-3.10.2" &&
+          ./configure -q --prefix="$nettle" --libdir="$nettle/lib" --disable-documentation &&
+          make -s -j"$(nproc)" && make -s install )
+      fi
+      pkgcfg="$nettle/lib/pkgconfig:$pkgcfg"
+      ldflags="-Wl,-rpath,$nettle/lib"
+    fi
     ( export PKG_CONFIG_PATH=$pkgcfg
       cd "$VSETUP_SRC/qemu/build"
       [ -f config.status ] || ../configure --target-list=aarch64-softmmu --enable-pvg \
         --enable-lzfse --enable-slirp --enable-libssh --enable-zstd --enable-nettle \
-        --enable-gnutls --enable-gtk --enable-sdl --disable-werror --disable-qom-cast-debug
+        --enable-gnutls --enable-gtk --enable-sdl --disable-werror --disable-qom-cast-debug \
+        ${ldflags:+--extra-ldflags="$ldflags"}
       ninja qemu-system-aarch64 )
   fi
 }

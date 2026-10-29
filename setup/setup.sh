@@ -134,6 +134,11 @@ build_reims() {
   # Always: cargo rebuilds only what changed, and a submodule update must reach the library
   # (QEMU is relinked below when the library is newer than it).
   log " Building reims-vgpu (the first build is long: its static lib is ~800 MB)"
+  # Its aarch64 guest-pointer code uses LSE atomics (ldsetal), which rustc's
+  # baseline aarch64 target does not enable; every Armv8.1+ core (GB10 too) has them.
+  if [ "$(uname -m)" = aarch64 ] && grep -qw atomics /proc/cpuinfo; then
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS:+$CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS }-C target-feature=+lse"
+  fi
   make -C "$VSETUP_SRC/reims-vgpu"
 }
 build_qemu() {

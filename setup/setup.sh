@@ -228,6 +228,7 @@ do_phase release && {
   log " Setting up the vphone-cli $VPHONE_CLI_PUBLIC release bundle (ROMs + guest resources)"
   zip="$VSETUP_RELEASE/VPhone-$VPHONE_CLI_PUBLIC.zip"
   if [ ! -d "$rel/VPhone.bundle/Contents/Resources/OpenAVB" ]; then
+    mkdir -p "$VSETUP_RELEASE"
     [ -f "$zip" ] || curl -L --retry 3 -o "$zip" \
       "https://github.com/Lakr233/vphone-cli/releases/download/$VPHONE_CLI_PUBLIC/VPhone-$VPHONE_CLI_PUBLIC.zip"
     [ -d "$rel/VPhone.bundle" ] || unzip -q -n "$zip" -d "$rel"

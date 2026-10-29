@@ -148,6 +148,13 @@ build_qemu() {
        "$VSETUP_SRC/qemu/build/qemu-system-aarch64" ]; then
     log " Building QEMU (-M vresearch101) against reims-vgpu"
     mkdir -p "$VSETUP_SRC/qemu/build"
+    # QEMU needs meson >= 1.5 and its configure takes the first meson on PATH; Ubuntu 24.04
+    # ships 1.3.2. Use a private venv's meson then (the system one is left alone).
+    local venv="$VSETUP_SRC/.build/meson-venv"
+    if ! printf '1.5.0\n%s\n' "$(meson --version 2>/dev/null || echo 0)" | sort -V -C; then
+      [ -x "$venv/bin/meson" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q 'meson>=1.5'; }
+      export PATH="$venv/bin:$PATH"
+    fi
     ( export PKG_CONFIG_PATH=$pkgcfg
       cd "$VSETUP_SRC/qemu/build"
       [ -f config.status ] || ../configure --target-list=aarch64-softmmu --enable-pvg \

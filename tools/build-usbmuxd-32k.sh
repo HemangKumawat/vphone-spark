@@ -18,15 +18,12 @@ mkdir -p "$OUT"
 git -C "$SRC" checkout -q -f "$COMMIT"
 sed -i 's/#define USB_MTU (3 \* 16384)/#define USB_MTU (2 * 16384)/' "$SRC/src/usb.h"
 grep -q '#define USB_MTU (2 \* 16384)' "$SRC/src/usb.h"
-# Ubuntu 24.04 has no libimobiledevice-glue package: build the release into $OUT/glue.
-if ! pkg-config --exists libimobiledevice-glue-1.0; then
-  GLUE=libimobiledevice-glue-1.3.1
-  if ! [ -f "$OUT/glue/lib/pkgconfig/libimobiledevice-glue-1.0.pc" ]; then
-    curl -fsSL "https://github.com/libimobiledevice/libimobiledevice-glue/releases/download/1.3.1/$GLUE.tar.bz2" |
-      tar -xj -C "$OUT"
-    (cd "$OUT/$GLUE" && ./configure -q --prefix="$OUT/glue" --disable-shared --enable-static && make -s install)
-  fi
-  export PKG_CONFIG_PATH="$OUT/glue/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+# Distros without libimobiledevice-glue (Ubuntu 24.04): link the private stack instead.
+RPATH=""
+IMD=$(tools/build-imobiledevice-stack.sh)
+if [ -n "$IMD" ]; then
+  export PKG_CONFIG_PATH="$IMD/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  RPATH="-Wl,-rpath,$IMD/lib"
 fi
 cd "$SRC"
 # HAVE_LIBUSB_HOTPLUG_API follows the device across DFU/recovery/RestoreOS re-enumerations;
@@ -38,5 +35,5 @@ gcc -O2 -Wall -Isrc $(pkg-config --cflags libusb-1.0 libplist-2.0 libimobiledevi
   -DHAVE_CLOCK_GETTIME=1 -DHAVE_LOCALTIME_R=1 -DHAVE_PPOLL=1 -DHAVE_SYS_TYPES_H=1 \
   -DHAVE_LIBUSB_HOTPLUG_API=1 \
   src/client.c src/device.c src/preflight.c src/log.c src/usb.c src/utils.c src/conf.c src/main.c \
-  -o "$OUT/usbmuxd" $(pkg-config --libs libusb-1.0 libplist-2.0 libimobiledevice-glue-1.0) -lpthread -lm
+  -o "$OUT/usbmuxd" $(pkg-config --libs libusb-1.0 libplist-2.0 libimobiledevice-glue-1.0) -lpthread -lm ${RPATH:+"$RPATH"}
 echo "built $OUT/usbmuxd ($("$OUT/usbmuxd" --version))"

@@ -187,9 +187,14 @@ build_creator() {
   if [ ! -d "$src/.git" ]; then
     git clone --depth 1 --branch "$VPHONE_CLI_PUBLIC" "$VPHONE_CLI_REPO" "$src"
   fi
+  # The restore engine links the libimobiledevice stack; on distros without a new enough one
+  # (Ubuntu 24.04) build it privately and point the C targets and the linker at it.
+  local imd flags=()
+  imd=$("$VSETUP_SRC/tools/build-imobiledevice-stack.sh")
+  [ -z "$imd" ] || flags=(-Xcc "-I$imd/include" -Xlinker "-L$imd/lib" -Xlinker -rpath -Xlinker "$imd/lib")
   ( cd "$VSETUP_SRC/linux-create"
     VPHONE_CLI="$src" ./sync-sources.sh
-    swift build --build-system swiftbuild --scratch-path .build/out )
+    swift build --build-system swiftbuild --scratch-path .build/out "${flags[@]}" )
 }
 build_usbmuxd() { "$VSETUP_SRC/tools/build-usbmuxd-32k.sh"; }
 # linux-apfs-rw with the iOS 27 volume features accepted (patches/linux-apfs-rw-ios27.patch):

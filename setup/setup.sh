@@ -264,4 +264,4 @@ if [ "$VSETUP_PHASE" = all ] || [ "$VSETUP_PHASE" = release ]; then
 fi
 
 log "Setup complete: binaries under $VSETUP_SRC, ROMs under $VSETUP_RELEASE."
-log "Next: ./create-vm.sh to pick the device and the iOS version and build the VM."
+log "Next: ./setup/create-vm.sh (from the checkout root) to pick the device and the iOS version and build the VM."

@@ -12,6 +12,9 @@
 set -Eeuo pipefail
 # shellcheck disable=SC1091  # this checkout's own lib/common.sh, resolved at run time
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+# vphone-cli finds guest-resources/ in its working directory (VPhoneResources.resolve falls back to
+# it), and the release phase links it at the checkout root: run from there wherever we were called.
+cd "$VSETUP_SRC"
 
 DEVICE=${DEVICE:-} IOS=${IOS:-} CLOUDOS_PICK=${CLOUDOS_PICK:-}
 SCALE=${SCALE:-1} NAME=${NAME:-} DRY=0 LIST=0 CID=${CID:-3}

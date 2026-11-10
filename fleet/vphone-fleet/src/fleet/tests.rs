@@ -130,6 +130,7 @@ fn active_idle_parked_and_awake_again() {
 fn past_max_awake_the_least_recently_used_is_parked() {
     let (mut f, _dir) = fleet();
     f.config.tunables.max_awake = 1;
+    f.config.tunables.boot_secs = 0;
     at(0);
     let a = phone(&mut f, "A");
     at(5);
@@ -140,6 +141,31 @@ fn past_max_awake_the_least_recently_used_is_parked() {
     assert_eq!(power(&f, "B"), Power::Active);
     assert_eq!(a.commands(), ["stop"]);
     assert_eq!(b.commands(), Vec::<String>::new());
+}
+
+#[test]
+fn a_phone_still_booting_is_not_parked_past_max_awake() {
+    let (mut f, _dir) = fleet();
+    f.config.tunables.max_awake = 1;
+    f.config.tunables.boot_secs = 300;
+    at(0);
+    let a = phone(&mut f, "A");
+    at(5);
+    let b = phone(&mut f, "B");
+    at(10);
+    f.tick();
+    // Neither has answered /v1/health yet: both stay up, over max_awake.
+    assert_eq!(a.commands(), Vec::<String>::new());
+    assert_eq!(b.commands(), Vec::<String>::new());
+    // Past boot_secs the least recently used one is parked as usual.
+    at(301);
+    f.tick();
+    assert_eq!(power(&f, "A"), Power::Parked);
+    assert_ne!(
+        power(&f, "B"),
+        Power::Parked,
+        "one phone over max_awake, so only one is parked"
+    );
 }
 
 #[test]

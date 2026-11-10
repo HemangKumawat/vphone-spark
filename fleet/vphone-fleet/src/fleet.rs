@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use vphone_api_proxy::{Upstream, log};
 
-use crate::config::{Config, Feature, Paths, Source, Switch};
+use crate::config::{Config, Feature, Paths, Source, Switch, Tunables};
 use crate::host;
 use crate::journal::Journal;
 use crate::phone::{self, PhoneToml};
@@ -77,6 +77,14 @@ struct Running {
     exit_recorded: bool,
     /// Its failing health is recorded, once until it answers again.
     unhealthy_recorded: bool,
+}
+
+impl Running {
+    /// Started, has not answered /v1/health yet (`last_ok` starts at `started`), and is inside
+    /// `boot_secs`: parking it now would freeze the guest before vphoned is up.
+    fn booting(&self, now: u64, boot_secs: u64) -> bool {
+        self.last_ok <= self.started && now < self.started + boot_secs
+    }
 }
 
 /// Every phone this process manages, and how it treats them.
@@ -427,32 +435,48 @@ impl Fleet {
                     }
                 }
             }
-            let (power, quiet) = {
+            let (power, quiet, booting) = {
                 let p = &self.phones[id];
-                (p.power, now.saturating_sub(p.last_used))
+                (
+                    p.power,
+                    now.saturating_sub(p.last_used),
+                    p.booting(now, t.boot_secs),
+                )
             };
             if power == Power::Active && quiet >= t.idle_secs {
                 self.set_power(id, Power::Idle);
             }
-            if self.on(Feature::Parking) && power != Power::Parked && quiet >= t.park_secs {
+            if self.on(Feature::Parking)
+                && power != Power::Parked
+                && !booting
+                && quiet >= t.park_secs
+            {
                 // A failure is in the journal (phone.park_failed).
                 let _ = self.park(id);
             }
         }
+        self.park_past_max_awake(now, &t);
+    }
+
+    /// Parks the least recently used phones until at most `max_awake` are awake.
+    fn park_past_max_awake(&mut self, now: u64, t: &Tunables) {
         while self.on(Feature::Parking) {
-            let awake: Vec<(&String, u64)> = self
+            let awake: Vec<(&String, u64, bool)> = self
                 .phones
                 .iter()
                 .filter(|(_, p)| p.power != Power::Parked)
-                .map(|(id, p)| (id, p.last_used))
+                .map(|(id, p)| (id, p.last_used, p.booting(now, t.boot_secs)))
                 .collect();
             if awake.len() <= t.max_awake {
                 break;
             }
+            // A phone still booting counts as awake but is never the one parked: a pause mid-boot
+            // left its vphoned unstarted and `up` timed out.
             let Some(lru) = awake
                 .iter()
-                .min_by_key(|(_, used)| *used)
-                .map(|(id, _)| (*id).clone())
+                .filter(|(_, _, booting)| !booting)
+                .min_by_key(|(_, used, _)| *used)
+                .map(|(id, _, _)| (*id).clone())
             else {
                 break;
             };

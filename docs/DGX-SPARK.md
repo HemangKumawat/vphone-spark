@@ -69,9 +69,12 @@ As root, once:
    `vulkaninfo --summary`: the device must be the NVIDIA GPU, not `llvmpipe`. `run-vphone.sh` looks
    for the ICD at `/usr/share/vulkan/icd.d/nvidia_icd.aarch64.json`, then `nvidia_icd.json`, then
    `/etc/vulkan/icd.d/nvidia_icd.json`; set `VK_DRIVER_FILES` if yours is elsewhere.
-3. **vsock and memory maps** ([SETUP.md](SETUP.md#2-install-the-dependencies)):
+3. **vsock, Apple USB access and memory maps** ([SETUP.md](SETUP.md#2-install-the-dependencies)):
    ```sh
    echo vhost_vsock | sudo tee /etc/modules-load.d/vhost-vsock.conf
+   echo 'KERNEL=="vhost-vsock", MODE="0666"' | sudo tee /etc/udev/rules.d/90-vhost-vsock.rules
+   echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", MODE="0666"' | sudo tee /etc/udev/rules.d/90-vphone-apple-usb.rules
+   sudo udevadm control --reload-rules
    sudo modprobe vhost_vsock && sudo chmod 666 /dev/vhost-vsock
    echo 'vm.max_map_count = 1048576' | sudo tee /etc/sysctl.d/90-vphone.conf && sudo sysctl --system
    ```

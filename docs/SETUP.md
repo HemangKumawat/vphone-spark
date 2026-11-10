@@ -86,12 +86,17 @@ Set two system options. They are permanent, so this is needed only once:
 ```sh
 echo vhost_vsock | sudo tee /etc/modules-load.d/vhost-vsock.conf
 echo 'KERNEL=="vhost-vsock", MODE="0666"' | sudo tee /etc/udev/rules.d/90-vhost-vsock.rules
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", MODE="0666"' | sudo tee /etc/udev/rules.d/90-vphone-apple-usb.rules
+sudo udevadm control --reload-rules
 sudo modprobe vhost_vsock && sudo chmod 666 /dev/vhost-vsock
 echo 'vm.max_map_count = 1048576' | sudo tee /etc/sysctl.d/90-vphone.conf && sudo sysctl --system
 ```
 
 `vhost_vsock` is how the tools talk to the iPhone; `max_map_count` lets the GPU code map the guest's
-memory. Then get the code and check your PC:
+memory. The Apple USB rule lets vphone-cli, which runs as your user, open the virtual iPhone while
+it restores (USB/IP attaches it as a real USB device, 05ac:1227 in DFU). Fedora's usbmuxd package
+grants that access to the desktop user; without the rule, and over SSH, the restore stops with
+"The device did not enter dfu/recovery mode in time". Then get the code and check your PC:
 
 ```sh
 git clone https://github.com/YahiaAngelo/vphone-linux.git

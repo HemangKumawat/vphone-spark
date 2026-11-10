@@ -18,6 +18,13 @@ mkdir -p "$OUT"
 git -C "$SRC" checkout -q -f "$COMMIT"
 sed -i 's/#define USB_MTU (3 \* 16384)/#define USB_MTU (2 * 16384)/' "$SRC/src/usb.h"
 grep -q '#define USB_MTU (2 \* 16384)' "$SRC/src/usb.h"
+# Distros without libimobiledevice-glue (Ubuntu 24.04): link the private stack instead.
+RPATH=""
+IMD=$(tools/build-imobiledevice-stack.sh)
+if [ -n "$IMD" ]; then
+  export PKG_CONFIG_PATH="$IMD/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  RPATH="-Wl,-rpath,$IMD/lib"
+fi
 cd "$SRC"
 # HAVE_LIBUSB_HOTPLUG_API follows the device across DFU/recovery/RestoreOS re-enumerations;
 # HAVE_LIBIMOBILEDEVICE stays undefined (no lockdownd preflight).
@@ -28,5 +35,5 @@ gcc -O2 -Wall -Isrc $(pkg-config --cflags libusb-1.0 libplist-2.0 libimobiledevi
   -DHAVE_CLOCK_GETTIME=1 -DHAVE_LOCALTIME_R=1 -DHAVE_PPOLL=1 -DHAVE_SYS_TYPES_H=1 \
   -DHAVE_LIBUSB_HOTPLUG_API=1 \
   src/client.c src/device.c src/preflight.c src/log.c src/usb.c src/utils.c src/conf.c src/main.c \
-  -o "$OUT/usbmuxd" $(pkg-config --libs libusb-1.0 libplist-2.0 libimobiledevice-glue-1.0) -lpthread -lm
+  -o "$OUT/usbmuxd" $(pkg-config --libs libusb-1.0 libplist-2.0 libimobiledevice-glue-1.0) -lpthread -lm ${RPATH:+"$RPATH"}
 echo "built $OUT/usbmuxd ($("$OUT/usbmuxd" --version))"

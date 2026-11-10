@@ -46,14 +46,18 @@ pkg_feeds() {
     ubuntu|debian|linuxmint)
       sudo apt-get update
       sudo apt-get install -y git gcc g++ clang lld binutils make cmake ninja-build meson \
-        python3 python3-pil python3-setuptools pkg-config \
+        python3 python3-pil python3-setuptools python3-venv pkg-config \
         libglib2.0-dev libpixman-1-dev liblzfse-dev libslirp-dev libssh-dev \
-        libzstd-dev libnettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
-        libbzip2-dev libx11-dev libxkbcommon-dev wayland libwayland-dev \
+        libzstd-dev nettle-dev libgnutls28-dev libgtk-3-dev libsdl2-dev \
+        libbz2-dev libx11-dev libxkbcommon-dev libwayland-dev wayland-protocols \
         libvulkan-dev mesa-vulkan-drivers vulkan-tools \
-        socat gdb linux-tools-generic \
-        usbip sshfs fuse3 p7zip-full linux-headers-generic \
-        libusb-1.0-0-dev libplist-dev libimobiledevice-glue-dev libssl-dev libcurl4-openssl-dev ;;
+        socat gdb linux-tools-common "linux-tools-$(uname -r)" \
+        sshfs fuse3 p7zip-full "linux-headers-$(uname -r)" \
+        autoconf automake libtool \
+        libusb-1.0-0-dev libplist-dev libssl-dev libcurl4-openssl-dev ;;
+        # Ubuntu ships usbip in linux-tools-<kernel> and has no libimobiledevice-glue-dev
+        # (tools/build-usbmuxd-32k.sh builds it). The -generic metapackages miss the
+        # DGX Spark's -nvidia kernel, so headers and tools follow the running kernel.
     arch|cachyos|manjaro)
       sudo pacman -S --needed --noconfirm git gcc clang lld binutils make cmake ninja meson \
         python python-pillow glib2 pixman lzfse libslirp libssh zstd nettle gnutls gtk3 \
@@ -130,6 +134,11 @@ build_reims() {
   # Always: cargo rebuilds only what changed, and a submodule update must reach the library
   # (QEMU is relinked below when the library is newer than it).
   log " Building reims-vgpu (the first build is long: its static lib is ~800 MB)"
+  # Its aarch64 guest-pointer code uses LSE atomics (ldsetal) and RCPC loads (ldapr),
+  # which rustc's Armv8.0 baseline target does not enable; Armv8.3+ cores (GB10 too) have both.
+  if [ "$(uname -m)" = aarch64 ] && grep -qw atomics /proc/cpuinfo && grep -qw lrcpc /proc/cpuinfo; then
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS:+$CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS }-C target-feature=+lse,+rcpc"
+  fi
   make -C "$VSETUP_SRC/reims-vgpu"
 }
 build_qemu() {
@@ -139,11 +148,36 @@ build_qemu() {
        "$VSETUP_SRC/qemu/build/qemu-system-aarch64" ]; then
     log " Building QEMU (-M vresearch101) against reims-vgpu"
     mkdir -p "$VSETUP_SRC/qemu/build"
+    # QEMU needs meson >= 1.5 and its configure takes the first meson on PATH; Ubuntu 24.04
+    # ships 1.3.2. Use a private venv's meson then (the system one is left alone).
+    local venv="$VSETUP_SRC/.build/meson-venv"
+    if ! printf '1.5.0\n%s\n' "$(meson --version 2>/dev/null || echo 0)" | sort -V -C; then
+      [ -x "$venv/bin/meson" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q 'meson>=1.5'; } ||
+        die "could not set up meson >= 1.5 in $venv (Debian/Ubuntu: install python3-venv)"
+      export PATH="$venv/bin:$PATH"
+    fi
+    # The SEP model (hw/arm/apple-silicon/sep.c) calls nettle directly and QEMU wants >= 3.10;
+    # Ubuntu 24.04 ships 3.9.1. Build 3.10.2 into .build/nettle then, found first by pkg-config
+    # and by the loader (rpath), so QEMU and the system gnutls share that one copy.
+    local ldflags=""
+    if ! pkg-config --atleast-version=3.10 nettle; then
+      local nettle="$VSETUP_SRC/.build/nettle"
+      if ! [ -f "$nettle/lib/pkgconfig/nettle.pc" ]; then
+        log " Building nettle 3.10.2 (the distro's is older than QEMU needs)"
+        curl -fsSL https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz | tar -xz -C "$VSETUP_SRC/.build"
+        ( cd "$VSETUP_SRC/.build/nettle-3.10.2" &&
+          ./configure -q --prefix="$nettle" --libdir="$nettle/lib" --disable-documentation &&
+          make -s -j"$(nproc)" && make -s install )
+      fi
+      pkgcfg="$nettle/lib/pkgconfig:$pkgcfg"
+      ldflags="-Wl,-rpath,$nettle/lib"
+    fi
     ( export PKG_CONFIG_PATH=$pkgcfg
       cd "$VSETUP_SRC/qemu/build"
       [ -f config.status ] || ../configure --target-list=aarch64-softmmu --enable-pvg \
         --enable-lzfse --enable-slirp --enable-libssh --enable-zstd --enable-nettle \
-        --enable-gnutls --enable-gtk --enable-sdl --disable-werror --disable-qom-cast-debug
+        --enable-gnutls --enable-gtk --enable-sdl --disable-werror --disable-qom-cast-debug \
+        ${ldflags:+--extra-ldflags="$ldflags"}
       ninja qemu-system-aarch64 )
   fi
 }
@@ -154,9 +188,14 @@ build_creator() {
   if [ ! -d "$src/.git" ]; then
     git clone --depth 1 --branch "$VPHONE_CLI_PUBLIC" "$VPHONE_CLI_REPO" "$src"
   fi
+  # The restore engine links the libimobiledevice stack; on distros without a new enough one
+  # (Ubuntu 24.04) build it privately and point the C targets and the linker at it.
+  local imd flags=()
+  imd=$("$VSETUP_SRC/tools/build-imobiledevice-stack.sh")
+  [ -z "$imd" ] || flags=(-Xcc "-I$imd/include" -Xlinker "-L$imd/lib" -Xlinker -rpath -Xlinker "$imd/lib")
   ( cd "$VSETUP_SRC/linux-create"
     VPHONE_CLI="$src" ./sync-sources.sh
-    swift build --build-system swiftbuild --scratch-path .build/out )
+    swift build --build-system swiftbuild --scratch-path .build/out "${flags[@]}" )
 }
 build_usbmuxd() { "$VSETUP_SRC/tools/build-usbmuxd-32k.sh"; }
 # linux-apfs-rw with the iOS 27 volume features accepted (patches/linux-apfs-rw-ios27.patch):
@@ -190,6 +229,7 @@ do_phase release && {
   log " Setting up the vphone-cli $VPHONE_CLI_PUBLIC release bundle (ROMs + guest resources)"
   zip="$VSETUP_RELEASE/VPhone-$VPHONE_CLI_PUBLIC.zip"
   if [ ! -d "$rel/VPhone.bundle/Contents/Resources/OpenAVB" ]; then
+    mkdir -p "$VSETUP_RELEASE"
     [ -f "$zip" ] || curl -L --retry 3 -o "$zip" \
       "https://github.com/Lakr233/vphone-cli/releases/download/$VPHONE_CLI_PUBLIC/VPhone-$VPHONE_CLI_PUBLIC.zip"
     [ -d "$rel/VPhone.bundle" ] || unzip -q -n "$zip" -d "$rel"
@@ -224,4 +264,4 @@ if [ "$VSETUP_PHASE" = all ] || [ "$VSETUP_PHASE" = release ]; then
 fi
 
 log "Setup complete: binaries under $VSETUP_SRC, ROMs under $VSETUP_RELEASE."
-log "Next: ./create-vm.sh to pick the device and the iOS version and build the VM."
+log "Next: ./setup/create-vm.sh (from the checkout root) to pick the device and the iOS version and build the VM."
